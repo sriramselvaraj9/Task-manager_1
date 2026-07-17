@@ -8,15 +8,19 @@ from . import models, schemas, crud
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Task Manager API")
-app = FastAPI() 
-from fastapi.middleware.cors import CORSMiddleware
-
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5175",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5175",
+        "http://127.0.0.1:3000",
+    ],
     allow_methods=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_headers=["*"],
 )
 

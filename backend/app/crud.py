@@ -5,7 +5,8 @@ from . import models, schemas
 def create_task(db: Session, task: schemas.TaskCreate):
     db_task = models.Task(
         title=task.title,
-        description=task.description
+        description=task.description,
+        completed=task.completed,
     )
 
     db.add(db_task)
@@ -29,6 +30,7 @@ def update_task(db: Session, task_id: int, task: schemas.TaskCreate):
     if db_task:
         db_task.title = task.title
         db_task.description = task.description
+        db_task.completed = task.completed
 
         db.commit()
         db.refresh(db_task)

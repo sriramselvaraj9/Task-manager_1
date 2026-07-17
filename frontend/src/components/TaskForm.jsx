@@ -20,7 +20,7 @@ function TaskForm({ onAdd }) {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form className="task-form" onSubmit={handleSubmit}>
       <input
         type="text"
         placeholder="Task Title"
@@ -28,15 +28,11 @@ function TaskForm({ onAdd }) {
         onChange={(e) => setTitle(e.target.value)}
       />
 
-      <br /><br />
-
       <textarea
         placeholder="Task Description"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
       />
-
-      <br /><br />
 
       <button type="submit">Add Task</button>
     </form>

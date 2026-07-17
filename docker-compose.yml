@@ -1,18 +1,46 @@
-version: "3.8"
-
 services:
+  db:
+    image: postgres:16
+    container_name: postgres-db
+
+    env_file:
+      - ./backend/.env
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   backend:
+    build:
+      context: ./backend
     image: task-backend
     container_name: backend-container
+
+    env_file:
+      - ./backend/.env
+
     ports:
       - "8000:8000"
 
+    depends_on:
+      - db
 
   frontend:
+    build:
+      context: ./frontend
     image: task-frontend
     container_name: frontend-container
+
+    environment:
+      VITE_API_URL: http://localhost:8000
+
     ports:
       - "5173:5173"
+
     depends_on:
       - backend
+
+volumes:
+  postgres_data:

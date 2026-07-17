@@ -25,8 +25,8 @@ function App() {
   // Add new task
   const addTask = async (task) => {
     try {
-      await API.post("/tasks", task);
-      fetchTasks();
+      const response = await API.post("/tasks", task);
+      setTasks((currentTasks) => [...currentTasks, response.data]);
     } catch (error) {
       console.error("Error adding task:", error);
     }
@@ -36,7 +36,7 @@ function App() {
   const deleteTask = async (id) => {
     try {
       await API.delete(`/tasks/${id}`);
-      fetchTasks();
+      setTasks((currentTasks) => currentTasks.filter((task) => task.id !== id));
     } catch (error) {
       console.error("Error deleting task:", error);
     }
