@@ -21,7 +21,6 @@ app.add_middleware(
 )
 
 
-
 @app.get("/")
 def root():
     return {"message": "Task Manager API is running"}
