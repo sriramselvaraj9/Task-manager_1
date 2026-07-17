@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+
+  backend:
+    image: task-backend
+    container_name: backend-container
+    ports:
+      - "8000:8000"
+
+
+  frontend:
+    image: task-frontend
+    container_name: frontend-container
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
