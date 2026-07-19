@@ -1,70 +1,70 @@
-from fastapi import FastAPI, Depends, HTTPException
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
-from .database import Base, engine, get_db
-from . import models, schemas, crud
+from .database import Base, engine
+from .config import settings
+from .limiter import limiter
+from .auth_router import router as auth_router
+from .tasks_router import router as tasks_router
 
-Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Task Manager API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create tables if they do not exist; keep existing data intact across restarts.
+    Base.metadata.create_all(bind=engine)
+    yield
 
+
+app = FastAPI(
+    title="Task Manager API",
+    description="Secure, production-ready Task Manager backend API",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Connect global rate limiter to the application state and exception handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Configure CORS dynamically from settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5175",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5175",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
-    allow_credentials=False,
     allow_headers=["*"],
 )
 
 
+# Custom Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "frame-ancestors 'none'; "
+        "object-src 'none';"
+    )
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+# Root status endpoint
 @app.get("/")
 def root():
-    return {"message": "Task Manager API is running"}
+    return {
+        "message": "Task Manager API is running",
+        "status": "healthy"
+    }
 
 
-@app.post("/tasks", response_model=schemas.TaskResponse)
-def create(task: schemas.TaskCreate, db: Session = Depends(get_db)):
-    return crud.create_task(db, task)
-
-
-@app.get("/tasks", response_model=list[schemas.TaskResponse])
-def read_tasks(db: Session = Depends(get_db)):
-    return crud.get_tasks(db)
-
-
-@app.get("/tasks/{task_id}", response_model=schemas.TaskResponse)
-def read_task(task_id: int, db: Session = Depends(get_db)):
-    task = crud.get_task(db, task_id)
-
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    return task
-
-
-@app.put("/tasks/{task_id}", response_model=schemas.TaskResponse)
-def update(task_id: int, task: schemas.TaskCreate, db: Session = Depends(get_db)):
-    updated = crud.update_task(db, task_id, task)
-
-    if not updated:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    return updated
-
-
-@app.delete("/tasks/{task_id}")
-def delete(task_id: int, db: Session = Depends(get_db)):
-    deleted = crud.delete_task(db, task_id)
-
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    return {"message": "Task deleted successfully"}
+# Include sub-routers
+app.include_router(auth_router)
+app.include_router(tasks_router)

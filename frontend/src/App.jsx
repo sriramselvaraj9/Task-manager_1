@@ -1,74 +1,59 @@
 import { useEffect, useState } from "react";
-import API from "./services/api";
-import TaskForm from "./components/TaskForm";
-import TaskList from "./components/TaskList";
+import Auth from "./components/Auth";
+import Dashboard from "./components/Dashboard";
 import "./App.css";
 
 function App() {
-  const [tasks, setTasks] = useState([]);
+  const [token, setToken] = useState(null);
+  const [user, setUser] = useState(null);
+  const [initializing, setInitializing] = useState(true);
 
-  // Get all tasks
-  const fetchTasks = async () => {
-    try {
-      const response = await API.get("/tasks");
-      setTasks(response.data);
-    } catch (error) {
-      console.error("Error fetching tasks:", error);
-    }
-  };
-
-  // Load tasks when page opens
+  // Restore session from localStorage on initialization
   useEffect(() => {
-    fetchTasks();
+    const savedToken = localStorage.getItem("token");
+    const savedUser = localStorage.getItem("user");
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        console.error("Failed to parse user details from local storage:", e);
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+      }
+    }
+    setInitializing(false);
   }, []);
 
-  // Add new task
-  const addTask = async (task) => {
-    try {
-      const response = await API.post("/tasks", task);
-      setTasks((currentTasks) => [...currentTasks, response.data]);
-    } catch (error) {
-      console.error("Error adding task:", error);
-    }
+  const handleLogin = (savedToken, savedUser) => {
+    setToken(savedToken);
+    setUser(savedUser);
   };
 
-  // Delete task
-  const deleteTask = async (id) => {
-    try {
-      await API.delete(`/tasks/${id}`);
-      setTasks((currentTasks) => currentTasks.filter((task) => task.id !== id));
-    } catch (error) {
-      console.error("Error deleting task:", error);
-    }
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setToken(null);
+    setUser(null);
   };
 
-  // Update task completion status
-  const toggleComplete = async (task) => {
-    try {
-      await API.put(`/tasks/${task.id}`, {
-        title: task.title,
-        description: task.description,
-        completed: !task.completed,
-      });
-
-      fetchTasks();
-    } catch (error) {
-      console.error("Error updating task:", error);
-    }
-  };
+  if (initializing) {
+    return (
+      <div className="init-screen">
+        <span className="spinner large"></span>
+      </div>
+    );
+  }
 
   return (
-    <div className="container">
-      <h1>Task Manager</h1>
-
-      {/* Pass addTask function to TaskForm */}
-      <TaskForm onAdd={addTask} />
-
-      <TaskList
-        tasks={tasks}
-        deleteTask={deleteTask}
-        toggleComplete={toggleComplete}
-      />
+    <div className="app-root">
+      {token ? (
+        <Dashboard user={user} onLogout={handleLogout} />
+      ) : (
+        <div className="auth-wrapper">
+          <Auth onLogin={handleLogin} />
+        </div>
+      )}
     </div>
   );
 }

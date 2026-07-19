@@ -1,302 +1,275 @@
-# Task Manager Application
+# Task Manager
 
-A production-ready full-stack **Task Manager** application built with **FastAPI**, **React**, and **PostgreSQL**. The application provides RESTful APIs for task management, persistent database storage, and a responsive frontend. All services are containerized using **Docker Compose**, and Python dependencies are managed with **uv**.
-
----
-
-## Features
-
-### Backend
-- FastAPI REST APIs
-- PostgreSQL integration
-- Full CRUD operations
-- SQLAlchemy ORM
-- Pydantic validation
-- Clean project architecture
-- Proper error handling
-- REST API best practices
-- Dependency management using **uv**
-
-### Frontend
-- React application
-- Responsive user interface
-- Create, View, Update, and Delete tasks
-- API integration with FastAPI
-- Loading indicators
-- Form validation
-- Error handling
-
-### DevOps
-- Dockerized Backend
-- Dockerized Frontend
-- Dockerized PostgreSQL
-- Docker Compose support
+A secure, production-ready full-stack task management application built with **FastAPI**, **React**, and **PostgreSQL**. Users register, authenticate via JWT, and manage their own isolated task lists through a RESTful API.
 
 ---
 
-## Technology Stack
+## Table of Contents
 
-| Category | Technologies |
-|----------|--------------|
-| Backend | Python, FastAPI, SQLAlchemy, Uvicorn |
-| Frontend | React, Axios, CSS |
-| Database | PostgreSQL |
-| DevOps | Docker, Docker Compose |
-| Package Manager | uv |
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [Environment Configuration](#environment-configuration)
+- [Running with Docker Compose](#running-with-docker-compose)
+- [Local Development](#local-development)
+  - [Backend](#backend)
+  - [Frontend](#frontend)
+- [Dependency Management](#dependency-management)
+  - [Python — uv](#python--uv)
+  - [JavaScript — npm](#javascript--npm)
+- [API Reference](#api-reference)
 
 ---
 
-## Project Structure
+## Tech Stack
+
+| Layer        | Technology                                   |
+| :----------- | :------------------------------------------- |
+| **Backend**  | Python 3.12+, FastAPI, SQLAlchemy, Uvicorn   |
+| **Frontend** | React 19, Vite, Axios, Lucide               |
+| **Database** | PostgreSQL 16                                |
+| **Auth**     | JWT (PyJWT), Passlib / bcrypt                |
+| **DevOps**   | Docker, Docker Compose                       |
+| **Python PM**| [uv](https://github.com/astral-sh/uv)       |
+| **JS PM**    | npm                                          |
+
+---
+
+## Architecture
 
 ```
 task-manager/
-│
-├── backend/
+├── backend/                  # FastAPI application
 │   ├── app/
-│   │   ├── routers/
-│   │   ├── models.py
-│   │   ├── schemas.py
-│   │   ├── crud.py
-│   │   ├── database.py
-│   │   ├── config.py
-│   │   └── main.py
+│   │   ├── main.py           # App entry point, middleware, router registration
+│   │   ├── config.py         # Settings loaded from environment variables
+│   │   ├── database.py       # SQLAlchemy engine and session
+│   │   ├── models.py         # ORM models (User, Task)
+│   │   ├── schemas.py        # Pydantic request/response schemas
+│   │   ├── auth.py           # JWT creation and verification helpers
+│   │   ├── auth_router.py    # /auth/register, /auth/login endpoints
+│   │   ├── tasks_router.py   # /tasks CRUD endpoints (auth required)
+│   │   └── limiter.py        # SlowAPI rate limiter setup
 │   ├── Dockerfile
-│   ├── pyproject.toml
-│   └── uv.lock
-│
-├── frontend/
+│   ├── pyproject.toml        # Backend package specification
+│   └── .env.example          # Environment variable template
+├── frontend/                 # React + Vite application
 │   ├── src/
-│   ├── public/
 │   ├── Dockerfile
 │   └── package.json
-│
-├── docker-compose.yml
-└── README.md
+├── docker-compose.yml        # Multi-container orchestration
+├── pyproject.toml            # Root uv workspace configuration
+└── uv.lock                   # Python dependency lockfile
 ```
 
 ---
 
 ## Prerequisites
 
-Before running the project, install:
+| Requirement | Minimum Version |
+| :--- | :--- |
+| Docker Desktop | Latest |
+| Python | 3.12+ |
+| uv | Latest |
+| Node.js | 18+ |
+| npm | 9+ |
 
-- Docker Desktop
-- Python 3.11+
-- uv
-- Node.js & npm (optional for local frontend development)
-
----
-
-## Clone the Repository
+**Install uv** (if not already installed):
 
 ```bash
-git clone https://bitbucket.org/sriram2004/task-manager.git
-cd task-manager
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy BypassScope -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 ---
 
-# Running the Backend
+## Environment Configuration
 
-Install dependencies:
+The backend reads all sensitive values from a `.env` file. **Never commit this file.**
 
 ```bash
+cp backend/.env.example backend/.env
+```
+
+Open `backend/.env` and fill in your values:
+
+```env
+# PostgreSQL
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_DB=taskdb
+
+# Connection string — use 'db' as host when running via Docker Compose
+DATABASE_URL=postgresql://postgres:your_secure_password@db:5432/taskdb
+
+# JWT — change this to a long random string in production
+JWT_SECRET=change-this-to-a-strong-random-secret
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# CORS — comma-separated list of allowed frontend origins
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+
+# Rate Limits
+RATE_LIMIT_AUTH=5/minute
+RATE_LIMIT_TASKS=60/minute
+```
+
+> **Note:** When running locally (not via Docker), change `@db:5432` to `@localhost:5432` in `DATABASE_URL`.
+
+---
+
+## Running with Docker Compose
+
+This is the recommended way to run the full application stack.
+
+```bash
+# 1. Configure environment (one-time setup)
+cp backend/.env.example backend/.env
+# Edit backend/.env with your values
+
+# 2. Build and start all services
+docker compose up --build
+
+# 3. To run in detached (background) mode
+docker compose up --build -d
+
+# 4. To stop all services
+docker compose down
+```
+
+| Service     | URL                              |
+| :---------- | :------------------------------- |
+| Frontend    | http://localhost:5173            |
+| Backend API | http://localhost:8000            |
+| Swagger UI  | http://localhost:8000/docs       |
+
+---
+
+## Local Development
+
+Run each service independently for a faster development workflow.
+
+### Backend
+
+```bash
+# From the project root
+
+# 1. Sync dependencies and create virtual environment
 uv sync
+
+# 2. Start the backend with hot reload
+uv run uvicorn app.main:app --reload --app-dir backend
 ```
 
-Run the backend:
+The API will be available at `http://localhost:8000`.
+
+### Frontend
 
 ```bash
-uv run uvicorn app.main:app --reload
-```
-
-Backend URL:
-
-```
-http://localhost:8000
-```
-
-Swagger Documentation:
-
-```
-http://localhost:8000/docs
-```
-
----
-
-# Running the Frontend
-
-```bash
+# From the frontend directory
 cd frontend
+
+# 1. Install dependencies
 npm install
+
+# 2. Start the Vite dev server
 npm run dev
 ```
 
-Frontend URL:
+The frontend will be available at `http://localhost:5173`.
 
+---
+
+## Dependency Management
+
+### Python — `uv`
+
+This project uses **uv** as its Python package manager. Dependencies are defined in `pyproject.toml` and pinned in `uv.lock`. Do **not** use `pip` directly.
+
+| Task | Command |
+| :--- | :--- |
+| Install all dependencies | `uv sync` |
+| Add a new package | `uv add <package>` |
+| Remove a package | `uv remove <package>` |
+| Update the lockfile | `uv lock` |
+| Run a command in the venv | `uv run <command>` |
+
+> `uv sync` automatically creates the `.venv` and installs exactly what is in `uv.lock`, ensuring a reproducible environment across all machines.
+
+### JavaScript — `npm`
+
+Frontend packages are managed with **npm** and defined in `frontend/package.json`.
+
+| Task | Command |
+| :--- | :--- |
+| Install all packages | `npm install` |
+| Add a package | `npm install <package>` |
+| Remove a package | `npm uninstall <package>` |
+| Run development server | `npm run dev` |
+| Build for production | `npm run build` |
+| Lint code | `npm run lint` |
+
+---
+
+## API Reference
+
+All task endpoints require a `Bearer` token in the `Authorization` header.
+
+### Authentication
+
+| Method | Endpoint | Description | Auth Required |
+| :----- | :------- | :---------- | :------------ |
+| `POST` | `/auth/register` | Register a new user | No |
+| `POST` | `/auth/login` | Login and receive a JWT | No |
+
+**Register — Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "yourpassword"
+}
 ```
-http://localhost:5173
+
+**Login — Response:**
+```json
+{
+  "access_token": "<jwt_token>",
+  "token_type": "bearer"
+}
 ```
 
 ---
 
-# Running with Docker
+### Tasks
 
-Build the images:
+All task endpoints return or accept data in this shape:
 
-```bash
-docker compose build
+```json
+{
+  "id": 1,
+  "title": "Buy groceries",
+  "description": "Milk, eggs, bread",
+  "completed": false,
+  "user_id": 1
+}
 ```
 
-Start all services:
+| Method   | Endpoint        | Description             | Auth Required |
+| :------- | :-------------- | :---------------------- | :------------ |
+| `GET`    | `/tasks`        | Get all tasks for the current user | Yes |
+| `GET`    | `/tasks/{id}`   | Get a specific task | Yes |
+| `POST`   | `/tasks`        | Create a new task | Yes |
+| `PUT`    | `/tasks/{id}`   | Update an existing task | Yes |
+| `DELETE` | `/tasks/{id}`   | Delete a task | Yes |
 
-```bash
-docker compose up
-```
-
-Run in the background:
-
-```bash
-docker compose up -d
-```
-
-Stop all services:
-
-```bash
-docker compose down
-```
-
----
-
-## Application URLs
-
-| Service | URL |
-|----------|-----|
-| Frontend | http://localhost:5173 |
-| Backend | http://localhost:8000 |
-| Swagger API | http://localhost:8000/docs |
-
----
-
-## REST API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/tasks` | Get all tasks |
-| GET | `/tasks/{id}` | Get task by ID |
-| POST | `/tasks` | Create a task |
-| PUT | `/tasks/{id}` | Update a task |
-| DELETE | `/tasks/{id}` | Delete a task |
-
----
-
-## PostgreSQL
-
-Example table structure:
-
-| Column | Type |
-|---------|------|
-| id | Integer |
-| title | String |
-| description | String |
-| completed | Boolean |
-| created_at | Timestamp |
-
-View database records:
-
-```bash
-docker exec -it postgres psql -U postgres
-```
-
-```sql
-\c taskdb
-\dt
-SELECT * FROM tasks;
-\q
-```
-
----
-
-## uv Commands
-
-Install dependencies:
-
-```bash
-uv sync
-```
-
-Add a package:
-
-```bash
-uv add <package-name>
-```
-
-Remove a package:
-
-```bash
-uv remove <package-name>
-```
-
-Update lock file:
-
-```bash
-uv lock
-```
-
-Run the project:
-
-```bash
-uv run uvicorn app.main:app --reload
-```
-
----
-
-## Docker Commands
-
-```bash
-docker compose build
-docker compose up
-docker compose up -d
-docker compose down
-docker ps
-docker compose logs
-```
-
----
-
-## Phase 2 Improvements
-
-Compared to Phase 1, this version includes:
-
-- Migrated from in-memory storage to PostgreSQL
-- Implemented SQLAlchemy ORM
-- Persistent CRUD operations
-- Dependency management using **uv**
-- Improved backend architecture
-- Better error handling
-- REST API best practices
-- Responsive React frontend
-- Loading states and form validation
-- Dockerized backend, frontend, and PostgreSQL
-- Updated project documentation
-
----
-
-## Future Enhancements
-
-- User Authentication (JWT)
-- Search and Filtering
-- Pagination
-- Unit & Integration Testing
-- CI/CD Pipeline
-- Cloud Deployment
+> Full interactive documentation with request/response examples is available at **[http://localhost:8000/docs](http://localhost:8000/docs)**.
 
 ---
 
 ## Author
 
-**Sriram Selvaraj**
-
-BE Computer Science and Engineering
-
-**Tech Stack:** Python • FastAPI • React • PostgreSQL • SQLAlchemy • Docker • uv
+**Sriram Selvaraj** — BE Computer Science and Engineering

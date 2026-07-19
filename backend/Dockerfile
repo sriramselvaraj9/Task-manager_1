@@ -14,7 +14,12 @@ RUN uv pip install --system \
     uvicorn \
     sqlalchemy \
     psycopg2-binary \
-    python-dotenv
+    python-dotenv \
+    "pyjwt>=2.8.0" \
+    "passlib[bcrypt]>=1.7.4" \
+    "bcrypt==4.0.1" \
+    "python-multipart>=0.0.9" \
+    "slowapi>=0.1.9"
 
 # Copy the application
 COPY . .
