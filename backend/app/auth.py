@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .database import get_db
 from .config import settings
-from . import models
+from . import models 
 
 # Password hashing configuration
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

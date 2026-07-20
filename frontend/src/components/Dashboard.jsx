@@ -2,13 +2,37 @@ import { useEffect, useState } from "react";
 import API from "../services/api";
 import TaskForm from "./TaskForm";
 import TaskList from "./TaskList";
+import Toast from "./Toast";
 import { LogOut, CheckSquare, ListTodo, Clock, Sparkles, AlertCircle } from "lucide-react";
+
+const priorityWeight = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
+const sortTasks = (left, right) => {
+  const dueComparison = String(left.due_date || "").localeCompare(String(right.due_date || ""));
+  if (dueComparison !== 0) {
+    return dueComparison;
+  }
+
+  const leftPriority = priorityWeight[left.priority] ?? priorityWeight.medium;
+  const rightPriority = priorityWeight[right.priority] ?? priorityWeight.medium;
+
+  if (leftPriority !== rightPriority) {
+    return leftPriority - rightPriority;
+  }
+
+  return left.id - right.id;
+};
 
 function Dashboard({ user, onLogout }) {
   const [tasks, setTasks] = useState([]);
   const [filter, setFilter] = useState("all"); // 'all', 'pending', 'completed'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState({ visible: false, taskSnapshot: null });
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -42,12 +66,34 @@ function Dashboard({ user, onLogout }) {
 
   const deleteTask = async (id) => {
     setError("");
+    const taskToDelete = tasks.find(t => t.id === id);
+    if (!taskToDelete) return;
+
+    setTasks((prev) => prev.filter((task) => task.id !== id));
+    setToast({ visible: true, taskSnapshot: taskToDelete });
+
     try {
       await API.delete(`/tasks/${id}`);
-      setTasks((prev) => prev.filter((task) => task.id !== id));
     } catch (err) {
       console.error("Error deleting task:", err);
+      setTasks((prev) => [...prev, taskToDelete]);
+      setToast({ visible: false, taskSnapshot: null });
       setError("Failed to delete task.");
+    }
+  };
+
+  const undoDelete = async () => {
+    if (!toast.taskSnapshot) return;
+
+    const task = toast.taskSnapshot;
+    setToast({ visible: false, taskSnapshot: null });
+
+    try {
+      const response = await API.put(`/tasks/${task.id}/restore`);
+      setTasks((prev) => [...prev, response.data]);
+    } catch (err) {
+      console.error("Error restoring task:", err);
+      setError("Failed to restore task.");
     }
   };
 
@@ -57,6 +103,9 @@ function Dashboard({ user, onLogout }) {
       const response = await API.put(`/tasks/${task.id}`, {
         title: task.title,
         description: task.description,
+        start_date: task.start_date,
+        due_date: task.due_date,
+        priority: task.priority,
         completed: !task.completed,
       });
       setTasks((prev) =>
@@ -68,7 +117,9 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
-  const filteredTasks = tasks.filter((task) => {
+  const sortedTasks = [...tasks].sort(sortTasks);
+
+  const filteredTasks = sortedTasks.filter((task) => {
     if (filter === "completed") return task.completed;
     if (filter === "pending") return !task.completed;
     return true;
@@ -85,7 +136,7 @@ function Dashboard({ user, onLogout }) {
           <Sparkles className="logo-icon" />
           <h1>TaskFlow</h1>
         </div>
-        
+
         <div className="user-profile">
           <div className="user-info">
             <span className="user-label">Logged in as</span>
@@ -142,7 +193,7 @@ function Dashboard({ user, onLogout }) {
           <div className="glass-panel list-panel">
             <div className="list-header">
               <h2>My Tasks</h2>
-              
+
               {/* Filter Tabs */}
               <div className="filter-tabs">
                 <button
@@ -194,14 +245,23 @@ function Dashboard({ user, onLogout }) {
                   {filter === "all"
                     ? "Get started by adding your very first task in the form to the left!"
                     : filter === "pending"
-                    ? "Hooray! No pending tasks left to do."
-                    : "No completed tasks yet. Keep moving forward!"}
+                      ? "Hooray! No pending tasks left to do."
+                      : "No completed tasks yet. Keep moving forward!"}
                 </p>
               </div>
             )}
           </div>
         </section>
       </main>
+
+      {/* Toast Notification */}
+      {toast.visible && (
+        <Toast
+          message="Task deleted successfully."
+          onUndo={undoDelete}
+          onClose={() => setToast({ visible: false, taskSnapshot: null })}
+        />
+      )}
     </div>
   );
 }

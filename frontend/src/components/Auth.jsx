@@ -61,11 +61,11 @@ function Auth({ onLogin }) {
           email: email.trim(),
           password: password,
         });
-        
+
         const { access_token } = response.data;
         localStorage.setItem("token", access_token);
         localStorage.setItem("user", JSON.stringify({ email: email.trim() }));
-        
+
         setSuccess("Login successful! Redirecting...");
         setTimeout(() => {
           onLogin(access_token, { email: email.trim() });
@@ -78,17 +78,17 @@ function Auth({ onLogin }) {
         });
 
         setSuccess("Account created successfully! Logging you in...");
-        
+
         // Auto-login after registration for seamless UX
         const loginResponse = await API.post("/auth/login", {
           email: email.trim(),
           password: password,
         });
-        
+
         const { access_token } = loginResponse.data;
         localStorage.setItem("token", access_token);
         localStorage.setItem("user", JSON.stringify({ email: email.trim() }));
-        
+
         setTimeout(() => {
           onLogin(access_token, { email: email.trim() });
         }, 1000);

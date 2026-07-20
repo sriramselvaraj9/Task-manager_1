@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -46,6 +46,9 @@ class TokenData(BaseModel):
 class TaskCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=100)
     description: str = Field("", max_length=500)
+    start_date: date | None = None
+    due_date: date = Field(...)
+    priority: str = Field("medium")
     completed: bool = False
 
     @field_validator("title")
@@ -60,12 +63,25 @@ class TaskCreate(BaseModel):
     def validate_description(cls, v):
         return v.strip()
 
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v):
+        normalized = v.strip().lower()
+        if normalized not in {"low", "medium", "high"}:
+            raise ValueError("Priority must be low, medium, or high")
+        return normalized
+
 
 class TaskResponse(BaseModel):
     id: int
     title: str
     description: str
+    start_date: date
+    due_date: date
+    priority: str
     completed: bool
+    is_deleted: bool
+    deleted_at: datetime | None = None
     user_id: int
 
     class Config:

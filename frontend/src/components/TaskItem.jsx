@@ -1,15 +1,24 @@
-import { CheckCircle2, Circle, Trash2, Clock } from "lucide-react";
+import { CheckCircle2, Circle, Trash2, Clock, CalendarDays, Flag } from "lucide-react";
+
+const formatDate = (value) => {
+  if (!value) return "N/A";
+
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const priorityLabel = (value) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : "Medium");
 
 function TaskItem({ task, onDelete, onToggleComplete }) {
   const handleDelete = (e) => {
     e.stopPropagation(); // Avoid triggering completion toggle when clicking delete
-    const confirmDelete = window.confirm(
-      `Delete "${task.title}"? This cannot be undone.`
-    );
-
-    if (confirmDelete) {
-      onDelete(task.id);
-    }
+    onDelete(task.id);
   };
 
   const handleToggle = (e) => {
@@ -44,6 +53,18 @@ function TaskItem({ task, onDelete, onToggleComplete }) {
           <p className="task-item-desc">{task.description}</p>
         )}
         <div className="task-item-meta">
+          <span className={`status-badge priority ${task.priority || "medium"}`}>
+            <Flag size={12} />
+            <span>{priorityLabel(task.priority)}</span>
+          </span>
+          <span className="status-badge date">
+            <CalendarDays size={12} />
+            <span>Start {formatDate(task.start_date)}</span>
+          </span>
+          <span className="status-badge date">
+            <Clock size={12} />
+            <span>Due {formatDate(task.due_date)}</span>
+          </span>
           <span className={`status-badge ${task.completed ? "completed" : "pending"}`}>
             {task.completed ? (
               <>
