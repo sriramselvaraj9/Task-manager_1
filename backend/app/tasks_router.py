@@ -1,13 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
-from datetime import date
 
 from .database import get_db
 from . import models, schemas
 from .auth import get_current_user
+from .controllers.task_controller import TaskController
 from .limiter import limiter
 from .config import settings
-from . import crud
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -21,19 +20,8 @@ def create_task(
     db: Session = Depends(get_db)
 ):
     """Create a new task for the current authenticated user."""
-    db_task = models.Task(
-        title=task.title,
-        description=task.description,
-        start_date=task.start_date or date.today(),
-        due_date=task.due_date,
-        priority=task.priority,
-        completed=task.completed,
-        user_id=current_user.id,
-    )
-    db.add(db_task)
-    db.commit()
-    db.refresh(db_task)
-    return db_task
+    controller = TaskController(db)
+    return controller.create_task(current_user.id, task)
 
 
 @router.get("", response_model=list[schemas.TaskResponse])
@@ -43,8 +31,9 @@ def read_tasks(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Retrieve all tasks belonging to the current user."""
-    return crud.get_tasks(db, current_user.id)
+    """Retrieve all active tasks belonging to the current user."""
+    controller = TaskController(db)
+    return controller.list_tasks(current_user.id)
 
 
 @router.get("/deleted", response_model=list[schemas.TaskResponse])
@@ -54,8 +43,9 @@ def read_deleted_tasks(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Retrieve all soft-deleted tasks belonging to the current user.--------------------------------------------""""
-    return crud.get_deleted_tasks(db, current_user.id)
+    """Retrieve all soft-deleted tasks belonging to the current user."""
+    controller = TaskController(db)
+    return controller.list_deleted_tasks(current_user.id)
 
 
 @router.get("/{task_id}", response_model=schemas.TaskResponse)
@@ -67,13 +57,8 @@ def read_task(
     db: Session = Depends(get_db)
 ):
     """Retrieve a specific task, ensuring it belongs to the current user."""
-    db_task = crud.get_task(db, task_id, current_user.id)
-    if not db_task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
-    return db_task
+    controller = TaskController(db)
+    return controller.get_task(task_id, current_user.id)
 
 
 @router.put("/{task_id}", response_model=schemas.TaskResponse)
@@ -86,14 +71,8 @@ def update_task(
     db: Session = Depends(get_db)
 ):
     """Update a specific task, ensuring it belongs to the current user."""
-    db_task = crud.get_task(db, task_id, current_user.id)
-    if not db_task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
-    
-    return crud.update_task(db, task_id, current_user.id, task)
+    controller = TaskController(db)
+    return controller.update_task(task_id, current_user.id, task)
 
 
 @router.delete("/{task_id}")
@@ -104,14 +83,9 @@ def delete_task(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Delete a specific task, ensuring it belongs to the current user."""
-    db_task = crud.soft_delete_task(db, task_id, current_user.id)
-    if not db_task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
-    return {"message": "Task deleted successfully"}
+    """Soft-delete a specific task, ensuring it belongs to the current user."""
+    controller = TaskController(db)
+    return controller.soft_delete_task(task_id, current_user.id)
 
 
 @router.put("/{task_id}/restore", response_model=schemas.TaskResponse)
@@ -123,15 +97,8 @@ def restore_task(
     db: Session = Depends(get_db)
 ):
     """Restore a soft-deleted task, ensuring it belongs to the current user."""
-    db_task = crud.restore_task(db, task_id, current_user.id)
-    if not db_task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
-    if not db_task.is_deleted:
-        return db_task
-    return db_task
+    controller = TaskController(db)
+    return controller.restore_task(task_id, current_user.id)
 
 
 @router.delete("/{task_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
@@ -143,9 +110,5 @@ def permanently_delete_task(
     db: Session = Depends(get_db)
 ):
     """Permanently delete a previously soft-deleted task."""
-    db_task = crud.permanently_delete_task(db, task_id, current_user.id)
-    if not db_task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
+    controller = TaskController(db)
+    return controller.permanently_delete_task(task_id, current_user.id)

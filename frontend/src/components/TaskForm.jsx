@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   PlusCircle,
   Heading,
@@ -17,6 +17,19 @@ function TaskForm({ onAdd }) {
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("medium");
   const [error, setError] = useState("");
+
+  const startDateRef = useRef(null);
+  const dueDateRef = useRef(null);
+
+  const openPicker = (ref) => {
+    if (ref.current) {
+      try {
+        ref.current.showPicker();
+      } catch {
+        ref.current.focus();
+      }
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -37,6 +50,11 @@ function TaskForm({ onAdd }) {
 
     if (!dueDate) {
       setError("Task due date is required.");
+      return;
+    }
+
+    if (new Date(dueDate) < new Date(startDate)) {
+      setError("Due Date cannot be earlier than the Start Date.");
       return;
     }
 
@@ -121,22 +139,42 @@ function TaskForm({ onAdd }) {
       <div className="task-form-grid">
         <div className="input-group">
           <label htmlFor="task-start-date">Start Date</label>
-          <div className="input-wrapper">
-            <CalendarDays className="input-icon" size={18} />
+          <div className="input-wrapper date-wrapper">
+            <button
+              type="button"
+              className="date-icon-btn"
+              aria-label="Open start date picker"
+              onClick={() => openPicker(startDateRef)}
+            >
+              <CalendarDays size={18} />
+            </button>
             <input
+              ref={startDateRef}
               id="task-start-date"
               type="date"
               value={startDate}
-              disabled
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                if (error) setError("");
+              }}
+              required
             />
           </div>
         </div>
 
         <div className="input-group">
           <label htmlFor="task-due-date">Due Date</label>
-          <div className="input-wrapper">
-            <CalendarDays className="input-icon" size={18} />
+          <div className="input-wrapper date-wrapper">
+            <button
+              type="button"
+              className="date-icon-btn"
+              aria-label="Open due date picker"
+              onClick={() => openPicker(dueDateRef)}
+            >
+              <CalendarDays size={18} />
+            </button>
             <input
+              ref={dueDateRef}
               id="task-due-date"
               type="date"
               value={dueDate}
