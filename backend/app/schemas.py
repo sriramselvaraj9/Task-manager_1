@@ -76,6 +76,7 @@ class TaskResponse(BaseModel):
     id: int
     title: str
     description: str
+    created_at: datetime
     start_date: date
     due_date: date
     priority: str

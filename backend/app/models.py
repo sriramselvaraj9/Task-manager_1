@@ -20,6 +20,7 @@ class Task(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     description = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     start_date = Column(Date, nullable=False)
     due_date = Column(Date, nullable=False)
     priority = Column(String(20), nullable=False, default="medium")

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
-import { X, RotateCcw } from "lucide-react";
+import { X } from "lucide-react";
 
-function Toast({ message, onUndo, onClose, duration = 5000 }) {
+function Toast({ message, onClose, duration = 5000, actionLabel, onAction }) {
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
@@ -15,10 +15,11 @@ function Toast({ message, onUndo, onClose, duration = 5000 }) {
       <div className="toast-card">
         <div className="toast-content">
           <span>{message}</span>
-          <button className="toast-undo-btn" onClick={onUndo}>
-            <RotateCcw size={16} />
-            <span>Undo</span>
-          </button>
+          {actionLabel && onAction ? (
+            <button className="toast-action-btn" onClick={onAction} type="button">
+              <span>{actionLabel}</span>
+            </button>
+          ) : null}
         </div>
         <button className="toast-close-btn" onClick={onClose} aria-label="Close">
           <X size={16} />

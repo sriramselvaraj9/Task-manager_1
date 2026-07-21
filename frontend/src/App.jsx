@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Auth from "./components/Auth";
 import Dashboard from "./components/Dashboard";
+import RestorePage from "./components/RestorePage";
 import "./App.css";
 
 function App() {
@@ -46,15 +48,21 @@ function App() {
   }
 
   return (
-    <div className="app-root">
-      {token ? (
-        <Dashboard user={user} onLogout={handleLogout} />
-      ) : (
-        <div className="auth-wrapper">
-          <Auth onLogin={handleLogin} />
-        </div>
-      )}
-    </div>
+    <BrowserRouter>
+      <div className="app-root">
+        {token ? (
+          <Routes>
+            <Route path="/" element={<Dashboard user={user} onLogout={handleLogout} />} />
+            <Route path="/restore" element={<RestorePage user={user} onLogout={handleLogout} />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        ) : (
+          <div className="auth-wrapper">
+            <Auth onLogin={handleLogin} />
+          </div>
+        )}
+      </div>
+    </BrowserRouter>
   );
 }
 
