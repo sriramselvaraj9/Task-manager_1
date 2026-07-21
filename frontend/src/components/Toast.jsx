@@ -1,7 +1,7 @@
 import { useEffect } from "react";
-import { X } from "lucide-react";
+import { X, CheckCircle2, AlertCircle } from "lucide-react";
 
-function Toast({ message, onClose, duration = 5000, actionLabel, onAction }) {
+function Toast({ message, onClose, duration = 5000, type = "success" }) {
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
@@ -10,22 +10,24 @@ function Toast({ message, onClose, duration = 5000, actionLabel, onAction }) {
     return () => clearTimeout(timer);
   }, [duration, onClose]);
 
+  const isError = type === "error";
+
   return (
     <div className="toast-container">
-      <div className="toast-card">
+      <div className={`toast-card ${isError ? "toast-card--error" : ""}`}>
         <div className="toast-content">
+          {isError ? (
+            <AlertCircle size={16} className="toast-icon toast-icon--error" />
+          ) : (
+            <CheckCircle2 size={16} className="toast-icon toast-icon--success" />
+          )}
           <span>{message}</span>
-          {actionLabel && onAction ? (
-            <button className="toast-action-btn" onClick={onAction} type="button">
-              <span>{actionLabel}</span>
-            </button>
-          ) : null}
         </div>
         <button className="toast-close-btn" onClick={onClose} aria-label="Close">
           <X size={16} />
         </button>
-        <div 
-          className="toast-progress" 
+        <div
+          className={`toast-progress ${isError ? "toast-progress--error" : ""}`}
           style={{ animationDuration: `${duration}ms` }}
         />
       </div>

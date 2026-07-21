@@ -19,7 +19,9 @@ RUN uv pip install --system \
     "passlib[bcrypt]>=1.7.4" \
     "bcrypt==4.0.1" \
     "python-multipart>=0.0.9" \
-    "slowapi>=0.1.9"
+    "slowapi>=0.1.9" \
+    "groq>=0.9.0" \
+    "httpx>=0.27.0"
 
 # Copy the application
 COPY . .

@@ -319,7 +319,12 @@ function Dashboard({ user, onLogout }) {
           <aside className="right-sidebar">
             <div className="glass-panel form-panel">
               <h2>Create Task</h2>
-              <TaskForm onAdd={addTask} />
+              <TaskForm
+                onAdd={addTask}
+                onToast={(msg, type) =>
+                  setToast({ visible: true, message: msg, type: type || "success" })
+                }
+              />
             </div>
           </aside>
         </main>
@@ -338,7 +343,13 @@ function Dashboard({ user, onLogout }) {
         onCancel={closeDeleteModal}
       />
 
-      {toast.visible ? <Toast message={toast.message} onClose={() => setToast({ visible: false, message: "" })} /> : null}
+      {toast.visible ? (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast({ visible: false, message: "", type: "success" })}
+        />
+      ) : null}
     </div>
   );
 }

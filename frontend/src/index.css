@@ -169,7 +169,7 @@ body {
 .input-wrapper textarea,
 .input-wrapper select {
   width: 100%;
-  padding: 14px 16px 14px 44px;
+  padding: 14px 48px 14px 44px; /* right: room for AI button */
   background: var(--bg-secondary);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-md);
@@ -263,7 +263,8 @@ body {
 .input-wrapper textarea {
   min-height: 120px;
   resize: vertical;
-  padding: 14px 60px 14px 44px;
+  /* extra right padding: AI button (32px) + gap + char-counter space */
+  padding: 14px 72px 36px 44px;
 }
 
 .input-wrapper input:focus,
@@ -313,6 +314,109 @@ body {
 
 .char-counter.excess {
   color: var(--danger);
+}
+
+/* ── AI Improve Button ────────────────────────────────────── */
+.ai-improve-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 8px;
+  color: var(--primary);
+  cursor: pointer;
+  transition: var(--transition);
+  flex-shrink: 0;
+  z-index: 2;
+  /* Tooltip base */
+  overflow: visible;
+}
+
+/* For textarea — pin to top-right instead of vertical centre */
+.input-wrapper:has(textarea) .ai-improve-btn {
+  top: 12px;
+  transform: none;
+}
+
+.ai-improve-btn:hover:not(:disabled) {
+  background: rgba(34, 197, 94, 0.22);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.input-wrapper:has(textarea) .ai-improve-btn:hover:not(:disabled) {
+  transform: scale(1.1);
+}
+
+.ai-improve-btn:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.95);
+}
+.input-wrapper:has(textarea) .ai-improve-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.ai-improve-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.ai-improve-btn--loading {
+  animation: ai-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ai-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.35); }
+  50%       { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+}
+
+/* Spinner */
+.ai-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(34, 197, 94, 0.25);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: ai-spin 0.7s linear infinite;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Tooltip */
+.ai-improve-tooltip {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  background: #1f1f1f;
+  border: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  z-index: 100;
+}
+
+.ai-improve-btn:hover .ai-improve-tooltip {
+  opacity: 1;
 }
 
 .password-toggle {
@@ -1253,7 +1357,7 @@ body {
 .toast-card {
   background: var(--bg-glass);
   border: 1px solid var(--border-glass);
-  border-left: 4px solid var(--danger);
+  border-left: 4px solid var(--primary); /* success = green by default */
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
   display: flex;
@@ -1265,6 +1369,10 @@ body {
   overflow: hidden;
 }
 
+.toast-card--error {
+  border-left-color: var(--danger);
+}
+
 .toast-content {
   display: flex;
   align-items: center;
@@ -1274,7 +1382,17 @@ body {
   color: #fff;
 }
 
-.toast-undo-btn {
+.toast-icon--success {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.toast-icon--error {
+  color: var(--danger);
+  flex-shrink: 0;
+}
+
+.toast-action-btn {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-glass);
   color: #fff;
@@ -1287,7 +1405,7 @@ body {
   transition: var(--transition);
 }
 
-.toast-undo-btn:hover {
+.toast-action-btn:hover {
   background: var(--primary);
   color: #000;
   border-color: var(--primary);
@@ -1311,8 +1429,12 @@ body {
   bottom: 0;
   left: 0;
   height: 2px;
-  background: var(--danger);
+  background: var(--primary); /* success = green */
   animation: shrinkBar 5s linear forwards;
+}
+
+.toast-progress--error {
+  background: var(--danger);
 }
 
 @keyframes shrinkBar {

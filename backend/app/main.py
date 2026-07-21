@@ -11,6 +11,7 @@ from .database import Base, engine, ensure_task_columns
 from .limiter import limiter
 from .auth_router import router as auth_router
 from .tasks_router import router as tasks_router
+from .ai_router import router as ai_router
 
 
 @asynccontextmanager
@@ -94,3 +95,4 @@ def root():
 # -----------------------------
 app.include_router(auth_router)
 app.include_router(tasks_router)
+app.include_router(ai_router)

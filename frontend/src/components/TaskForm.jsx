@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import {
   PlusCircle,
   Heading,
@@ -6,17 +6,44 @@ import {
   AlertCircle,
   CalendarDays,
   Flag,
+  Sparkles,
 } from "lucide-react";
+import API from "../services/api";
 
 const getTodayDate = () => new Date().toISOString().slice(0, 10);
 
-function TaskForm({ onAdd }) {
+// Reusable AI improve button with spinner + tooltip
+function AIImproveButton({ onClick, loading, tooltip, id }) {
+  return (
+    <button
+      id={id}
+      type="button"
+      className={`ai-improve-btn ${loading ? "ai-improve-btn--loading" : ""}`}
+      onClick={onClick}
+      disabled={loading}
+      title={tooltip}
+      aria-label={tooltip}
+    >
+      {loading ? (
+        <span className="ai-spinner" aria-hidden="true" />
+      ) : (
+        <Sparkles size={15} />
+      )}
+      <span className="ai-improve-tooltip">{tooltip}</span>
+    </button>
+  );
+}
+
+function TaskForm({ onAdd, onToast }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState(getTodayDate());
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("medium");
   const [error, setError] = useState("");
+
+  const [aiTitleLoading, setAiTitleLoading] = useState(false);
+  const [aiDescLoading, setAiDescLoading] = useState(false);
 
   const startDateRef = useRef(null);
   const dueDateRef = useRef(null);
@@ -30,6 +57,27 @@ function TaskForm({ onAdd }) {
       }
     }
   };
+
+  const improveText = useCallback(async (text, field, setter, setLoading) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    setLoading(true);
+    try {
+      const res = await API.post("/ai/improve-text", { text: trimmed, field });
+      setter(res.data.improved_text);
+      onToast?.("✨ Text improved successfully.");
+    } catch (err) {
+      console.error("AI improve error:", err?.response?.data || err?.message || err);
+      const detail = err?.response?.data?.detail;
+      const msg = detail
+        ? `AI error: ${detail}`
+        : "Unable to improve the text. Please try again.";
+      onToast?.(msg, "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [onToast]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -93,6 +141,7 @@ function TaskForm({ onAdd }) {
         </div>
       )}
 
+      {/* ── Title ─────────────────────────────────────────────── */}
       <div className="input-group">
         <label htmlFor="task-title">Title</label>
         <div className="input-wrapper">
@@ -109,12 +158,21 @@ function TaskForm({ onAdd }) {
             maxLength={105}
             required
           />
+          <AIImproveButton
+            id="ai-improve-title-btn"
+            tooltip="Improve Title with AI"
+            loading={aiTitleLoading}
+            onClick={() =>
+              improveText(title, "title", setTitle, setAiTitleLoading)
+            }
+          />
           <span className={`char-counter ${title.length > 100 ? "excess" : ""}`}>
             {title.length}/100
           </span>
         </div>
       </div>
 
+      {/* ── Description ───────────────────────────────────────── */}
       <div className="input-group">
         <label htmlFor="task-desc">Description</label>
         <div className="input-wrapper">
@@ -130,12 +188,28 @@ function TaskForm({ onAdd }) {
             maxLength={505}
             required
           />
-          <span className={`char-counter ${description.length > 500 ? "excess" : ""}`}>
+          <AIImproveButton
+            id="ai-improve-desc-btn"
+            tooltip="Improve Description with AI"
+            loading={aiDescLoading}
+            onClick={() =>
+              improveText(
+                description,
+                "description",
+                setDescription,
+                setAiDescLoading
+              )
+            }
+          />
+          <span
+            className={`char-counter ${description.length > 500 ? "excess" : ""}`}
+          >
             {description.length}/500
           </span>
         </div>
       </div>
 
+      {/* ── Dates + Priority ──────────────────────────────────── */}
       <div className="task-form-grid">
         <div className="input-group">
           <label htmlFor="task-start-date">Start Date</label>
@@ -193,10 +267,7 @@ function TaskForm({ onAdd }) {
             <button
               type="button"
               className={`priority-chip low ${priority === "low" ? "active" : ""}`}
-              onClick={() => {
-                setPriority("low");
-                if (error) setError("");
-              }}
+              onClick={() => { setPriority("low"); if (error) setError(""); }}
               aria-pressed={priority === "low"}
             >
               <Flag size={14} />
@@ -205,10 +276,7 @@ function TaskForm({ onAdd }) {
             <button
               type="button"
               className={`priority-chip medium ${priority === "medium" ? "active" : ""}`}
-              onClick={() => {
-                setPriority("medium");
-                if (error) setError("");
-              }}
+              onClick={() => { setPriority("medium"); if (error) setError(""); }}
               aria-pressed={priority === "medium"}
             >
               <Flag size={14} />
@@ -217,10 +285,7 @@ function TaskForm({ onAdd }) {
             <button
               type="button"
               className={`priority-chip high ${priority === "high" ? "active" : ""}`}
-              onClick={() => {
-                setPriority("high");
-                if (error) setError("");
-              }}
+              onClick={() => { setPriority("high"); if (error) setError(""); }}
               aria-pressed={priority === "high"}
             >
               <Flag size={14} />
