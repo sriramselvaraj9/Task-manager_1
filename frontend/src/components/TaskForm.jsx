@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   PlusCircle,
   Heading,
@@ -34,7 +34,7 @@ function AIImproveButton({ onClick, loading, tooltip, id }) {
   );
 }
 
-function TaskForm({ onAdd, onToast }) {
+function TaskForm({ onAdd, onToast, editTask = null, onUpdate, onCancelEdit }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState(getTodayDate());
@@ -58,12 +58,13 @@ function TaskForm({ onAdd, onToast }) {
     }
   };
 
+
   const improveText = useCallback(async (text, field, setter, setLoading) => {
     const trimmed = text.trim();
     if (!trimmed) return;
 
     setLoading(true);
-    try {
+    try{
       const res = await API.post("/ai/improve-text", { text: trimmed, field });
       setter(res.data.improved_text);
       onToast?.("✨ Text improved successfully.");
@@ -116,21 +117,40 @@ function TaskForm({ onAdd, onToast }) {
       return;
     }
 
-    onAdd({
+    const payload = {
       title: trimmedTitle,
       description: trimmedDescription,
       start_date: startDate,
       due_date: dueDate,
       priority,
       completed: false,
-    });
+    };
 
+    if (editTask && onUpdate) {
+      onUpdate(editTask.id, payload);
+      onCancelEdit?.();
+    } else {
+      onAdd(payload);
+    }
+
+    // Reset form to blank for create mode
     setTitle("");
     setDescription("");
     setStartDate(getTodayDate());
     setDueDate("");
     setPriority("medium");
   };
+
+  // Populate form when editTask changes
+  useEffect(() => {
+    if (editTask) {
+      setTitle(editTask.title || "");
+      setDescription(editTask.description || "");
+      setStartDate(editTask.start_date || getTodayDate());
+      setDueDate(editTask.due_date || getTodayDate());
+      setPriority(editTask.priority || "medium");
+    }
+  }, [editTask]);
 
   return (
     <form className="task-form" onSubmit={handleSubmit}>
@@ -166,9 +186,7 @@ function TaskForm({ onAdd, onToast }) {
               improveText(title, "title", setTitle, setAiTitleLoading)
             }
           />
-          <span className={`char-counter ${title.length > 100 ? "excess" : ""}`}>
-            {title.length}/100
-          </span>
+          
         </div>
       </div>
 
@@ -200,12 +218,8 @@ function TaskForm({ onAdd, onToast }) {
                 setAiDescLoading
               )
             }
-          />
-          <span
-            className={`char-counter ${description.length > 500 ? "excess" : ""}`}
-          >
-            {description.length}/500
-          </span>
+          /> 
+
         </div>
       </div>
 
@@ -295,10 +309,17 @@ function TaskForm({ onAdd, onToast }) {
         </div>
       </div>
 
-      <button type="submit" className="btn-primary form-submit-btn">
-        <PlusCircle size={18} />
-        <span>Add Task</span>
-      </button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="submit" className="btn-primary form-submit-btn">
+          <PlusCircle size={18} />
+          <span>{editTask ? 'Save Changes' : 'Add Task'}</span>
+        </button>
+        {editTask && (
+          <button type="button" className="btn-secondary" onClick={() => onCancelEdit?.()}>
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
   );
 }

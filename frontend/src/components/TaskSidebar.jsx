@@ -65,10 +65,6 @@ function TaskSidebar({
       )}
 
       <div className="sidebar-user">
-        <div className="sidebar-user-meta">
-          <div className="sidebar-user-avatar">{userEmail?.charAt(0).toUpperCase() || "U"}</div>
-          <span>{userEmail || "User"}</span>
-        </div>
         <button onClick={onLogout} className="btn-logout" title="Sign Out">
           <LogOut size={18} />
           <span>Logout</span>

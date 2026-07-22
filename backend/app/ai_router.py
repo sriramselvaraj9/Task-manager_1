@@ -49,15 +49,14 @@ FIELD_HINTS = {
 }
 
 
-# ── Endpoint ───────────────────────────────────────────────────────────────────
-
+# ── Endpoint ─-──────────────────────────────────────────────────────────────────
 @router.post(
     "/improve-text",
     response_model=ImproveTextResponse,
     status_code=status.HTTP_200_OK,
     summary="Improve task text with AI",
 )
-@limiter.limit(settings.RATE_LIMIT_AI)
+@limiter.limit(settings.RATE_LIMIT_AI) 
 async def improve_text(
     request: Request,
     body: ImproveTextRequest,

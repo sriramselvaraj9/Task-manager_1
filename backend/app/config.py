@@ -23,7 +23,9 @@ class Settings:
     RATE_LIMIT_TASKS: str = os.getenv("RATE_LIMIT_TASKS", "60/minute")
     RATE_LIMIT_AI: str = os.getenv("RATE_LIMIT_AI", "20/minute")
 
-    # Groq AI
+    # AI service keys
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    AI_API_KEY: str = os.getenv("OPENAI_API_KEY", os.getenv("GROQ_API_KEY", ""))
 
 settings = Settings()

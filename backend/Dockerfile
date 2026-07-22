@@ -21,7 +21,8 @@ RUN uv pip install --system \
     "python-multipart>=0.0.9" \
     "slowapi>=0.1.9" \
     "groq>=0.9.0" \
-    "httpx>=0.27.0"
+    "httpx>=0.27.0" \
+    "openai>=1.0.0"
 
 # Copy the application
 COPY . .

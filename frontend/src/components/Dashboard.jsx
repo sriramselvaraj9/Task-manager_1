@@ -5,6 +5,7 @@ import TaskList from "./TaskList";
 import Toast from "./Toast";
 import TaskSidebar from "./TaskSidebar";
 import ConfirmationModal from "./ConfirmationModal";
+import AIChatbot from "./AIChatbot";
 import { AlertCircle, CheckSquare, Clock, ListTodo, Sparkles } from "lucide-react";
 
 const priorityWeight = {
@@ -54,6 +55,9 @@ function Dashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState({ visible: false, message: "" });
+  const [editTask, setEditTask] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 6;
   const [deleteModal, setDeleteModal] = useState({ open: false, task: null, loading: false, error: "" });
 
   const fetchTasks = async () => {
@@ -83,6 +87,18 @@ function Dashboard({ user, onLogout }) {
       console.error("Error adding task:", err);
       const errMsg = err.response?.data?.detail || "Failed to create task.";
       setError(Array.isArray(errMsg) ? errMsg[0]?.msg : errMsg);
+    }
+  };
+
+  const updateTask = async (taskId, taskData) => {
+    setError("");
+    try {
+      const response = await API.put(`/tasks/${taskId}`, taskData);
+      setTasks((prev) => prev.map((t) => (t.id === response.data.id ? response.data : t)));
+      setToast({ visible: true, message: "Task updated successfully." });
+    } catch (err) {
+      console.error("Error updating task:", err);
+      setError("Failed to update task.");
     }
   };
 
@@ -168,6 +184,19 @@ function Dashboard({ user, onLogout }) {
       .some((value) => normalizeText(String(value)).includes(query));
   });
 
+  const pageCount = Math.max(1, Math.ceil(filteredTasks.length / pageSize));
+  const paginatedTasks = filteredTasks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    if (currentPage > pageCount) {
+      setCurrentPage(pageCount);
+    }
+  }, [currentPage, pageCount]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, section]);
+
   const currentViewTitle =
     section === "upcoming"
       ? "Upcoming Tasks"
@@ -208,9 +237,6 @@ function Dashboard({ user, onLogout }) {
           </div>
           
           <div className="top-actions">
-            <button className="icon-btn">
-              <AlertCircle size={20} />
-            </button>
             <div className="user-profile-sm">
               <div style={{width: 24, height: 24, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000'}}>
                 {user?.email?.charAt(0).toUpperCase() || 'U'}
@@ -289,11 +315,35 @@ function Dashboard({ user, onLogout }) {
                   <p>Loading your task workspace...</p>
                 </div>
               ) : filteredTasks.length > 0 ? (
-                <TaskList
-                  tasks={filteredTasks}
-                  deleteTask={deleteTask}
-                  toggleComplete={toggleComplete}
-                />
+                <>
+                  <TaskList
+                    tasks={paginatedTasks}
+                    deleteTask={deleteTask}
+                    toggleComplete={toggleComplete}
+                    onEdit={(task) => setEditTask(task)}
+                  />
+                  <div className="pagination-controls">
+                    <button
+                      type="button"
+                      className="pagination-button"
+                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </button>
+                    <div className="pagination-info">
+                      Page {currentPage} of {pageCount} • Showing {paginatedTasks.length} of {filteredTasks.length}
+                    </div>
+                    <button
+                      type="button"
+                      className="pagination-button"
+                      onClick={() => setCurrentPage((prev) => Math.min(pageCount, prev + 1))}
+                      disabled={currentPage === pageCount}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </>
               ) : (
                 <div className="empty-state">
                   <div className="empty-icon-wrapper">
@@ -318,9 +368,12 @@ function Dashboard({ user, onLogout }) {
 
           <aside className="right-sidebar">
             <div className="glass-panel form-panel">
-              <h2>Create Task</h2>
+              <h2>{editTask ? "Edit Task" : "Create Task"}</h2>
               <TaskForm
+                editTask={editTask}
                 onAdd={addTask}
+                onUpdate={(id, payload) => updateTask(id, payload)}
+                onCancelEdit={() => setEditTask(null)}
                 onToast={(msg, type) =>
                   setToast({ visible: true, message: msg, type: type || "success" })
                 }
@@ -350,6 +403,8 @@ function Dashboard({ user, onLogout }) {
           onClose={() => setToast({ visible: false, message: "", type: "success" })}
         />
       ) : null}
+
+      <AIChatbot onTaskSync={fetchTasks} />
     </div>
   );
 }

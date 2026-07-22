@@ -1,6 +1,6 @@
 import TaskItem from "./TaskItem";
 
-function TaskList({ tasks, deleteTask, toggleComplete }) {
+function TaskList({ tasks, deleteTask, toggleComplete, onEdit }) {
   return (
     <div className="task-list">
       {tasks.map((task) => (
@@ -9,6 +9,7 @@ function TaskList({ tasks, deleteTask, toggleComplete }) {
           task={task}
           onDelete={deleteTask}
           onToggleComplete={toggleComplete}
+          onEdit={onEdit}
         />
       ))}
     </div>

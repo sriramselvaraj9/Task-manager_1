@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Trash2, Clock, CalendarDays, Flag } from "lucide-react";
+import { CheckCircle2, Circle, Trash2, Clock, CalendarDays, Flag, Edit2 } from "lucide-react";
 
 const formatDate = (value) => {
   if (!value) return "N/A";
@@ -15,7 +15,7 @@ const formatDate = (value) => {
 
 const priorityLabel = (value) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : "Medium");
 
-function TaskItem({ task, onDelete, onToggleComplete }) {
+function TaskItem({ task, onDelete, onToggleComplete, onEdit }) {
   const handleDelete = (e) => {
     e.stopPropagation(); // Avoid triggering completion toggle when clicking delete
     onDelete(task.id);
@@ -82,6 +82,14 @@ function TaskItem({ task, onDelete, onToggleComplete }) {
       </div>
 
       <div className="task-item-actions">
+        <button 
+          type="button" 
+          className="btn-icon" 
+          onClick={(e) => { e.stopPropagation(); onEdit?.(task); }}
+          title="Edit Task"
+        >
+          <Edit2 size={18} />
+        </button>
         <button 
           type="button" 
           className="btn-icon danger" 
