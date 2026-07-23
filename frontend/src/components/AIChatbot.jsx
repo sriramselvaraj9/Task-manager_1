@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Send, Sparkles, X } from "lucide-react";
+import { AlertCircle, Mic, MicOff, Send, Sparkles, Trash2, X } from "lucide-react";
 import API from "../services/api";
 let chronoLib = null;
 
@@ -16,6 +16,8 @@ async function ensureChrono() {
 }
 import "./AIChatbot.css";
 
+const STORAGE_KEY = "ai_chatbot_history";
+
 const initialMessages = [
   {
     id: 1,
@@ -25,29 +27,166 @@ const initialMessages = [
   },
 ];
 
+function loadSavedMessages() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error("Failed to parse saved chat history:", e);
+  }
+  return initialMessages;
+}
+
 function formatTimestamp(timestamp) {
   return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function AIChatbot({ visible = false, onClose, onTaskSync }) {
+function AIChatbot({ visible = false, onClose, onTaskSync, onNavigateSection, onFilterStatus, onSetSearchQuery }) {
   const [open, setOpen] = useState(visible);
-  const [messages, setMessages] = useState(initialMessages);
+  const [messages, setMessages] = useState(loadSavedMessages);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("Online");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [listening, setListening] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
+  const recognitionRef = useRef(null);
   const messagesEndRef = useRef(null);
+
+  const toggleListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "en-US";
+
+      recognition.onstart = () => {
+        setListening(true);
+        setStatus("Listening...");
+        setError("");
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          setInput(transcript);
+          // Automatically submit voice transcript
+          handleVoiceSubmit(transcript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        setListening(false);
+        setStatus("Online");
+        if (event.error !== "no-speech") {
+          setError(`Voice error: ${event.error}`);
+        }
+      };
+
+      recognition.onend = () => {
+        setListening(false);
+        setStatus("Online");
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (e) {
+      console.error("Failed to start speech recognition:", e);
+      setListening(false);
+      setStatus("Online");
+    }
+  };
+
+  const handleVoiceSubmit = async (transcriptText) => {
+    if (!transcriptText || !transcriptText.trim()) return;
+
+    const userMessage = {
+      id: Date.now(),
+      role: "user",
+      text: transcriptText.trim(),
+      timestamp: new Date().toISOString(),
+    };
+
+    addMessage(userMessage);
+    setInput("");
+    setLoading(true);
+    setError("");
+    setStatus("Processing...");
+
+    if (pendingAction) {
+      const handled = await handlePendingAction(userMessage.text);
+      setStatus("Online");
+      setLoading(false);
+      if (handled) return;
+    }
+
+    const handledLocally = await handleLocalCommands(userMessage.text);
+    if (handledLocally) {
+      setStatus("Online");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await API.post("/ai/chat", { message: userMessage.text });
+      const data = response.data;
+      const assistantText = data.ai_message || "I couldn't process that command.";
+      addAssistantMessage(assistantText);
+
+      if (onTaskSync) {
+        onTaskSync();
+      }
+    } catch (err) {
+      console.error("AI chat error:", err);
+      setError(err.response?.data?.detail || "Unable to connect to AI assistant.");
+      const failMsg = "Sorry, I had trouble processing that voice command.";
+      addAssistantMessage(failMsg);
+    } finally {
+      setStatus("Online");
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     setOpen(visible);
   }, [visible]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch (e) {
+      console.error("Failed to save chat history to localStorage:", e);
+    }
+  }, [messages]);
+
+  useEffect(() => {
     if (open && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, open]);
+
+  const clearHistory = () => {
+    setMessages(initialMessages);
+    localStorage.removeItem(STORAGE_KEY);
+  };
 
   const addMessage = (newMessage) => {
     setMessages((current) => [...current, newMessage]);
@@ -143,19 +282,25 @@ function AIChatbot({ visible = false, onClose, onTaskSync }) {
           const today = new Date().toISOString().slice(0, 10);
           const payload = { title, description, start_date: today, due_date: due, priority: "medium", completed: false };
           const resp = await API.post('/tasks', payload);
-          addAssistantMessage(`Created task: ${resp.data.title} (id ${resp.data.id})`);
+          const successMsg = `Created task: ${resp.data.title}`;
+          addAssistantMessage(successMsg);
+          speakText(successMsg);
           onTaskSync?.();
         } catch (err) {
           console.error('Failed to create task', err);
           const msg = err.response?.data?.detail || err.message || 'Unknown error';
-          addAssistantMessage(`Sorry, I could not create the task. ${Array.isArray(msg) ? msg[0]?.msg || msg : msg}`);
+          const errMsg = `Sorry, I could not create the task. ${Array.isArray(msg) ? msg[0]?.msg || msg : msg}`;
+          addAssistantMessage(errMsg);
+          speakText(errMsg);
         }
         return true;
       }
 
       // No due date provided: set pending action and ask user for due date
       setPendingAction({ type: "create", payload: { title, description } });
-      addAssistantMessage("I can create that. When should it be due? Reply with YYYY-MM-DD, 'today', or 'tomorrow'.");
+      const askDateMsg = "I can create that. When should it be due? Reply with YYYY-MM-DD, 'today', or 'tomorrow'.";
+      addAssistantMessage(askDateMsg);
+      speakText(askDateMsg);
       return true;
     }
 
@@ -165,12 +310,16 @@ function AIChatbot({ visible = false, onClose, onTaskSync }) {
       const id = Number(mDeleteId[1]);
       try {
         await API.delete(`/tasks/${id}`);
-        addAssistantMessage(`Deleted task id ${id}.`);
+        const delMsg = `Deleted task ${id}.`;
+        addAssistantMessage(delMsg);
+        speakText(delMsg);
         onTaskSync?.();
       } catch (err) {
         console.error('Failed to delete task by id', err);
         const msg = err.response?.data?.detail || err.message || 'Unknown error';
-        addAssistantMessage(`Could not delete task id ${id}. ${Array.isArray(msg) ? msg[0]?.msg || msg : msg}`);
+        const errMsg = `Could not delete task id ${id}. ${Array.isArray(msg) ? msg[0]?.msg || msg : msg}`;
+        addAssistantMessage(errMsg);
+        speakText(errMsg);
       }
       return true;
     }
@@ -183,17 +332,23 @@ function AIChatbot({ visible = false, onClose, onTaskSync }) {
         const respAll = await API.get('/tasks');
         const existing = (respAll.data || []).find((it) => it.id === id);
         if (!existing) {
-          addAssistantMessage(`Task id ${id} not found.`);
+          const notFoundMsg = `Task id ${id} not found.`;
+          addAssistantMessage(notFoundMsg);
+          speakText(notFoundMsg);
           return true;
         }
         const payload = { ...existing, completed: true };
         await API.put(`/tasks/${id}`, payload);
-        addAssistantMessage(`Marked task id ${id} as completed.`);
+        const doneMsg = `Marked task ${id} as completed.`;
+        addAssistantMessage(doneMsg);
+        speakText(doneMsg);
         onTaskSync?.();
       } catch (err) {
         console.error('Failed to mark complete', err);
         const msg = err.response?.data?.detail || err.message || 'Unknown error';
-        addAssistantMessage(`Could not mark task id ${id} as complete. ${Array.isArray(msg) ? msg[0]?.msg || msg : msg}`);
+        const errMsg = `Could not mark task id ${id} as complete. ${Array.isArray(msg) ? msg[0]?.msg || msg : msg}`;
+        addAssistantMessage(errMsg);
+        speakText(errMsg);
       }
       return true;
     }
@@ -222,12 +377,42 @@ function AIChatbot({ visible = false, onClose, onTaskSync }) {
       return true;
     }
 
-    // Fallback: list pending/completed/all
-    const isPending = /\b(pending|incomplete|not done)\b/.test(tl) && /\b(list|give|show|what)\b/.test(tl);
-    const isCompleted = /\b(completed|done|finished)\b/.test(tl) && /\b(list|give|show|what)\b/.test(tl);
-    const isAll = /\b(all tasks|all)\b/.test(tl) && /\b(list|give|show|what)\b/.test(tl);
+    // Navigating UI sections & filtering commands: e.g. "show pending tasks", "go to completed", "filter high priority"
+    const isPending = /\b(pending|incomplete|not done)\b/.test(tl);
+    const isCompleted = /\b(completed|done|finished)\b/.test(tl);
+    const isUpcoming = /\b(upcoming|due soon)\b/.test(tl);
+    const isShowList = /\b(list|give|show|what|filter|view|open|go to|display)\b/.test(tl);
 
-    if (!isPending && !isCompleted && !isAll) return false;
+    if (isShowList) {
+      if (isPending) {
+        onNavigateSection?.("dashboard");
+        onFilterStatus?.("pending");
+        onSetSearchQuery?.("");
+        addAssistantMessage("Filtered the web UI to show pending tasks.");
+        return true;
+      }
+      if (isCompleted) {
+        onNavigateSection?.("completed");
+        onFilterStatus?.("all");
+        onSetSearchQuery?.("");
+        addAssistantMessage("Navigated to completed tasks view.");
+        return true;
+      }
+      if (isUpcoming) {
+        onNavigateSection?.("upcoming");
+        onFilterStatus?.("all");
+        onSetSearchQuery?.("");
+        addAssistantMessage("Navigated to upcoming tasks view.");
+        return true;
+      }
+      if (/\b(all tasks|dashboard|home|my tasks)\b/.test(tl)) {
+        onNavigateSection?.("dashboard");
+        onFilterStatus?.("all");
+        onSetSearchQuery?.("");
+        addAssistantMessage("Navigated to main tasks dashboard.");
+        return true;
+      }
+    }
 
     try {
       const resp = await API.get('/tasks');
@@ -238,7 +423,8 @@ function AIChatbot({ visible = false, onClose, onTaskSync }) {
       else items = all;
 
       if (items.length === 0) {
-        addAssistantMessage(isCompleted ? 'No completed tasks found.' : 'No pending tasks found.');
+        const textMsg = isCompleted ? 'No completed tasks found.' : 'No pending tasks found.';
+        addAssistantMessage(textMsg);
         return true;
       }
 
@@ -251,7 +437,8 @@ function AIChatbot({ visible = false, onClose, onTaskSync }) {
         completed: !!it.completed,
       }));
 
-      addAssistantMessage({ items: structured, meta: { title: isAll ? 'Tasks' : isCompleted ? 'Completed Tasks' : 'Pending Tasks' } });
+      const title = isCompleted ? 'Completed Tasks' : isPending ? 'Pending Tasks' : 'Tasks';
+      addAssistantMessage({ items: structured, meta: { title } });
       return true;
     } catch (err) {
       console.error('Failed to fetch tasks for list command', err);
@@ -353,9 +540,25 @@ function AIChatbot({ visible = false, onClose, onTaskSync }) {
             <span className="ai-chatbot-title">AI Task Assistant</span>
             <span className="ai-chatbot-status">● {status}</span>
           </div>
-          <button className="icon-btn small" onClick={() => { setOpen(false); onClose?.(); }}>
-            <X size={18} />
-          </button>
+          <div className="ai-chatbot-header-actions">
+            <button
+              type="button"
+              className="icon-btn small"
+              title="Clear Chat History"
+              aria-label="Clear chat history"
+              onClick={clearHistory}
+            >
+              <Trash2 size={16} />
+            </button>
+            <button
+              type="button"
+              className="icon-btn small"
+              aria-label="Close chat"
+              onClick={() => { setOpen(false); onClose?.(); }}
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="ai-chatbot-body">
@@ -405,11 +608,26 @@ function AIChatbot({ visible = false, onClose, onTaskSync }) {
 
         <div className="ai-chatbot-footer">
           <div className="ai-input-row">
+            <button
+              type="button"
+              className={`voice-btn ${listening ? "active" : ""}`}
+              onClick={toggleListening}
+              title={listening ? "Listening... Click to stop" : "Voice AI Command (Click to speak)"}
+              aria-label="Voice AI Command"
+            >
+              {listening ? <MicOff size={18} className="mic-pulse" /> : <Mic size={18} />}
+            </button>
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Type your task request..."
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+              placeholder={listening ? "Listening..." : "Type or speak your request..."}
             />
             <button type="button" className="send-btn" onClick={handleSubmit} disabled={loading || !input.trim()}>
               {loading ? <span className="spinner small" /> : <Send size={18} />}

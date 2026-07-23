@@ -6,7 +6,7 @@ import Toast from "./Toast";
 import TaskSidebar from "./TaskSidebar";
 import ConfirmationModal from "./ConfirmationModal";
 import AIChatbot from "./AIChatbot";
-import { AlertCircle, CheckSquare, Clock, ListTodo, Sparkles } from "lucide-react";
+import { AlertCircle, CheckSquare, Clock, ListTodo, Mic, MicOff, Plus, Sparkles, X } from "lucide-react";
 
 const priorityWeight = {
   high: 0,
@@ -60,6 +60,173 @@ function Dashboard({ user, onLogout }) {
   const pageSize = 6;
   const [deleteModal, setDeleteModal] = useState({ open: false, task: null, loading: false, error: "" });
 
+  const [showForm, setShowForm] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
+
+  const handleTopVoiceAI = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setToast({ visible: true, message: "Voice recognition not supported in browser", type: "error" });
+      return;
+    }
+
+    if (voiceListening) {
+      setVoiceListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "en-US";
+
+      recognition.onstart = () => {
+        setVoiceListening(true);
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          processVoiceCommand(transcript);
+        }
+      };
+
+      recognition.onerror = () => {
+        setVoiceListening(false);
+      };
+
+      recognition.onend = () => {
+        setVoiceListening(false);
+      };
+
+      recognition.start();
+    } catch (e) {
+      console.error("Speech error", e);
+      setVoiceListening(false);
+    }
+  };
+
+  const processVoiceCommand = async (text) => {
+    const raw = text.trim();
+    if (!raw) return;
+
+    const tl = raw.toLowerCase();
+
+    // 1) Handle Navigation & Filter Voice Commands locally for instant response
+    if (/\b(pending|incomplete|not done)\b/.test(tl)) {
+      setSection("dashboard");
+      setStatusFilter("pending");
+      setSearchQuery("");
+      setToast({ visible: true, message: "Filtered UI: Pending tasks", type: "success" });
+      return;
+    } else if (/\b(completed|done|finished)\b/.test(tl)) {
+      setSection("completed");
+      setStatusFilter("all");
+      setSearchQuery("");
+      setToast({ visible: true, message: "Navigated: Completed tasks", type: "success" });
+      return;
+    } else if (/\b(upcoming|due soon)\b/.test(tl)) {
+      setSection("upcoming");
+      setStatusFilter("all");
+      setSearchQuery("");
+      setToast({ visible: true, message: "Navigated: Upcoming tasks", type: "success" });
+      return;
+    } else if (/\b(all tasks|dashboard|home|my tasks)\b/.test(tl)) {
+      setSection("dashboard");
+      setStatusFilter("all");
+      setSearchQuery("");
+      setToast({ visible: true, message: "Showing all tasks", type: "success" });
+      return;
+    }
+
+    // 2) Try backend AI for rich task management (Create, Update, Delete, Complete, etc.)
+    try {
+      setLoading(true);
+      const response = await API.post("/ai/chat", { message: raw });
+      const data = response.data;
+      const fn = data.function_name;
+      const intent = data.intent;
+
+      // If the AI successfully performed an operation that changes database state
+      const dbMutatingFunctions = ["create_task", "update_task", "delete_task", "restore_task", "permanent_delete", "complete_task"];
+      const isMutation = dbMutatingFunctions.includes(fn) || (intent === "CREATE_TASK" && data.result);
+
+      if (isMutation) {
+        await fetchTasks();
+        setSearchQuery("");
+        setToast({ visible: true, message: data.ai_message || "Action completed successfully.", type: "success" });
+        return;
+      }
+
+      // If it's a search intent, update search query in UI
+      if (fn === "search_tasks" || intent === "SEARCH_TASKS") {
+        const query = data.function_arguments?.query || raw;
+        setSearchQuery(query);
+        setToast({ visible: true, message: `Searching: ${query}`, type: "success" });
+        return;
+      }
+      
+      // Fallback if AI response doesn't execute a specific DB operation
+      setSearchQuery(raw);
+    } catch (err) {
+      console.error("AI voice processing failed, falling back to local processing:", err);
+      // Fallback to local regex-based task creation
+      const isCreateAction = /^(?:create|add|make|new)\b/i.test(tl);
+      if (isCreateAction) {
+        let title = "";
+        let description = "";
+
+        const mTitleDesc = raw.match(/(?:with\s+)?(?:the\s+)?title\s+(.+?)\s+(?:and\s+)?(?:with\s+)?(?:the\s+)?description\s+(.+)/i);
+        if (mTitleDesc) {
+          title = mTitleDesc[1].trim();
+          description = mTitleDesc[2].trim();
+        } else {
+          const mDescTitle = raw.match(/(?:with\s+)?(?:the\s+)?description\s+(.+?)\s+(?:and\s+)?(?:with\s+)?(?:the\s+)?title\s+(.+)/i);
+          if (mDescTitle) {
+            description = mDescTitle[1].trim();
+            title = mDescTitle[2].trim();
+          } else {
+            let cleaned = raw.replace(/^(?:create|add|make|new)\s+(?:a\s+)?(?:task\s*)?(?:with\s+)?(?:the\s+)?(?:title\s+)?/i, "").trim();
+            title = cleaned;
+          }
+        }
+
+        let due_date = new Date().toISOString().slice(0, 10);
+        const dueMatch = raw.match(/\b(?:due|by)\s+(\d{4}-\d{2}-\d{2})\b/i);
+        if (dueMatch) {
+          due_date = dueMatch[1];
+        } else if (/\btomorrow\b/i.test(raw)) {
+          const d = new Date();
+          d.setDate(d.getDate() + 1);
+          due_date = d.toISOString().slice(0, 10);
+        }
+
+        if (title) {
+          try {
+            const today = new Date().toISOString().slice(0, 10);
+            const payload = { title, description, start_date: today, due_date, priority: "medium", completed: false };
+            const response = await API.post("/tasks", payload);
+            setTasks((prev) => [...prev, response.data]);
+            setSearchQuery("");
+            setToast({ visible: true, message: `Created task: ${title}`, type: "success" });
+          } catch (localErr) {
+            console.error("Local voice task creation failed:", localErr);
+            const errMsg = localErr.response?.data?.detail || "Failed to create task.";
+            const msg = Array.isArray(errMsg) ? errMsg[0]?.msg : errMsg;
+            setToast({ visible: true, message: msg, type: "error" });
+          }
+          return;
+        }
+      }
+      
+      // Default fallback
+      setSearchQuery(raw);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchTasks = async () => {
     setLoading(true);
     setError("");
@@ -83,10 +250,12 @@ function Dashboard({ user, onLogout }) {
     try {
       const response = await API.post("/tasks", taskData);
       setTasks((prev) => [...prev, response.data]);
+      return true;
     } catch (err) {
       console.error("Error adding task:", err);
       const errMsg = err.response?.data?.detail || "Failed to create task.";
       setError(Array.isArray(errMsg) ? errMsg[0]?.msg : errMsg);
+      return false;
     }
   };
 
@@ -96,9 +265,12 @@ function Dashboard({ user, onLogout }) {
       const response = await API.put(`/tasks/${taskId}`, taskData);
       setTasks((prev) => prev.map((t) => (t.id === response.data.id ? response.data : t)));
       setToast({ visible: true, message: "Task updated successfully." });
+      return true;
     } catch (err) {
       console.error("Error updating task:", err);
-      setError("Failed to update task.");
+      const errMsg = err.response?.data?.detail || "Failed to update task.";
+      setError(Array.isArray(errMsg) ? errMsg[0]?.msg : errMsg);
+      return false;
     }
   };
 
@@ -234,11 +406,33 @@ function Dashboard({ user, onLogout }) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+            <button
+              type="button"
+              className={`search-voice-ai-btn ${voiceListening ? "listening" : ""}`}
+              onClick={handleTopVoiceAI}
+              title={voiceListening ? "Listening... Speak command" : "Voice AI Command (Click & Speak)"}
+            >
+              <span className={`voice-badge ${voiceListening ? "pulsing" : ""}`}>
+                {voiceListening ? <MicOff size={14} /> : <Mic size={14} />}
+                {voiceListening ? "Listening..." : "Voice AI"}
+              </span>
+            </button>
           </div>
-          
+
           <div className="top-actions">
+            <button
+              type="button"
+              className={`btn-primary-sm ${showForm ? "active" : ""}`}
+              onClick={() => {
+                setEditTask(null);
+                setShowForm((prev) => !prev);
+              }}
+            >
+              {showForm ? <X size={16} /> : <Plus size={16} />}
+              <span>{showForm ? "Close Form" : "New Task"}</span>
+            </button>
             <div className="user-profile-sm">
-              <div style={{width: 24, height: 24, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000'}}>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000' }}>
                 {user?.email?.charAt(0).toUpperCase() || 'U'}
               </div>
               <span>{user?.email || "User"}</span>
@@ -247,7 +441,7 @@ function Dashboard({ user, onLogout }) {
         </header>
 
         {/* Page Content */}
-        <main className="page-content">
+        <main className={`page-content ${showForm || editTask ? "has-sidebar" : "full-width"}`}>
           <div className="main-feed">
             {/* Quick Stats Panel */}
             <div className="stats-grid">
@@ -366,20 +560,36 @@ function Dashboard({ user, onLogout }) {
             </div>
           </div>
 
-          <aside className="right-sidebar">
-            <div className="glass-panel form-panel">
-              <h2>{editTask ? "Edit Task" : "Create Task"}</h2>
-              <TaskForm
-                editTask={editTask}
-                onAdd={addTask}
-                onUpdate={(id, payload) => updateTask(id, payload)}
-                onCancelEdit={() => setEditTask(null)}
-                onToast={(msg, type) =>
-                  setToast({ visible: true, message: msg, type: type || "success" })
-                }
-              />
-            </div>
-          </aside>
+          {(showForm || editTask) && (
+            <aside className="right-sidebar">
+              <div className="glass-panel form-panel">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h2 style={{ margin: 0 }}>{editTask ? "Edit Task" : "Create Task"}</h2>
+                  <button
+                    type="button"
+                    className="icon-btn small"
+                    onClick={() => { setShowForm(false); setEditTask(null); }}
+                    title="Close"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <TaskForm
+                  editTask={editTask}
+                  onAdd={async (payload) => {
+                    const ok = await addTask(payload);
+                    if (ok) setShowForm(false);
+                    return ok;
+                  }}
+                  onUpdate={(id, payload) => updateTask(id, payload)}
+                  onCancelEdit={() => setEditTask(null)}
+                  onToast={(msg, type) =>
+                    setToast({ visible: true, message: msg, type: type || "success" })
+                  }
+                />
+              </div>
+            </aside>
+          )}
         </main>
       </div>
 
@@ -404,7 +614,12 @@ function Dashboard({ user, onLogout }) {
         />
       ) : null}
 
-      <AIChatbot onTaskSync={fetchTasks} />
+      <AIChatbot
+        onTaskSync={fetchTasks}
+        onNavigateSection={setSection}
+        onFilterStatus={setStatusFilter}
+        onSetSearchQuery={setSearchQuery}
+      />
     </div>
   );
 }

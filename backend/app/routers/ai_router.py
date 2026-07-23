@@ -3,10 +3,10 @@ from pydantic import BaseModel, Field
 # pyrefly: ignore [missing-import]
 from groq import AsyncGroq, GroqError
 
-from .auth import get_current_user
-from .models import User
-from .config import settings
-from .limiter import limiter
+from ..auth import get_current_user
+from ..models import User
+from ..config import settings
+from ..limiter import limiter
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 

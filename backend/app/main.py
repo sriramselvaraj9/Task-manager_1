@@ -9,9 +9,9 @@ from slowapi.errors import RateLimitExceeded
 from .config import settings
 from .database import Base, engine, ensure_task_columns
 from .limiter import limiter
-from .auth_router import router as auth_router
-from .tasks_router import router as tasks_router
-from .ai_router import router as ai_router
+from .routers.auth_router import router as auth_router
+from .routers.tasks_router import router as tasks_router
+from .routers.ai_router import router as ai_router
 from .ai.chat_router import router as ai_chat_router
 
 

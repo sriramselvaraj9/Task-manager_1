@@ -80,7 +80,7 @@ function TaskForm({ onAdd, onToast, editTask = null, onUpdate, onCancelEdit }) {
     }
   }, [onToast]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -126,19 +126,22 @@ function TaskForm({ onAdd, onToast, editTask = null, onUpdate, onCancelEdit }) {
       completed: false,
     };
 
+    let success = false;
     if (editTask && onUpdate) {
-      onUpdate(editTask.id, payload);
-      onCancelEdit?.();
+      success = await onUpdate(editTask.id, payload);
+      if (success) onCancelEdit?.();
     } else {
-      onAdd(payload);
+      success = await onAdd(payload);
     }
 
-    // Reset form to blank for create mode
-    setTitle("");
-    setDescription("");
-    setStartDate(getTodayDate());
-    setDueDate("");
-    setPriority("medium");
+    if (success) {
+      // Reset form to blank for create mode
+      setTitle("");
+      setDescription("");
+      setStartDate(getTodayDate());
+      setDueDate("");
+      setPriority("medium");
+    }
   };
 
   // Populate form when editTask changes

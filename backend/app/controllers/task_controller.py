@@ -11,6 +11,11 @@ class TaskController:
         self.service = TaskService(db)
 
     def create_task(self, user_id: int, payload: schemas.TaskCreate):
+        if self.service.check_duplicate(user_id, payload):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A task with the exact same title, description, start date, and due date already exists."
+            )
         return self.service.create_task(user_id, payload)
 
     def list_tasks(self, user_id: int):
@@ -26,6 +31,11 @@ class TaskController:
         return task
 
     def update_task(self, task_id: int, user_id: int, payload: schemas.TaskCreate):
+        if self.service.check_duplicate(user_id, payload, exclude_task_id=task_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A task with the exact same title, description, start date, and due date already exists."
+            )
         task = self.service.update_task(task_id, user_id, payload)
         if not task:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")

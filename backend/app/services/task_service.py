@@ -9,6 +9,20 @@ class TaskService:
     def __init__(self, db: Session):
         self.db = db
 
+    def check_duplicate(self, user_id: int, payload: schemas.TaskCreate, exclude_task_id: int = None) -> bool:
+        start_date = payload.start_date or date.today()
+        query = self.db.query(models.Task).filter(
+            models.Task.user_id == user_id,
+            models.Task.is_deleted == False,
+            models.Task.title == payload.title,
+            models.Task.description == (payload.description or ""),
+            models.Task.start_date == start_date,
+            models.Task.due_date == payload.due_date,
+        )
+        if exclude_task_id:
+            query = query.filter(models.Task.id != exclude_task_id)
+        return query.first() is not None
+
     def create_task(self, user_id: int, payload: schemas.TaskCreate) -> models.Task:
         task = models.Task(
             title=payload.title,
