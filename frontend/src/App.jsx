@@ -9,6 +9,16 @@ function App() {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [initializing, setInitializing] = useState(true);
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+
+  useEffect(() => {
+    document.documentElement.className = theme;
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  };
 
   // Restore session from localStorage on initialization
   useEffect(() => {
@@ -52,8 +62,8 @@ function App() {
       <div className="app-root">
         {token ? (
           <Routes>
-            <Route path="/" element={<Dashboard user={user} onLogout={handleLogout} />} />
-            <Route path="/restore" element={<RestorePage user={user} onLogout={handleLogout} />} />
+            <Route path="/" element={<Dashboard user={user} onLogout={handleLogout} theme={theme} toggleTheme={toggleTheme} />} />
+            <Route path="/restore" element={<RestorePage user={user} onLogout={handleLogout} theme={theme} toggleTheme={toggleTheme} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         ) : (

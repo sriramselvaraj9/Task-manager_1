@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import API from "../services/api";
 import { Mail, Lock, LogIn, UserPlus, Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
 
@@ -11,6 +11,66 @@ function Auth({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const handleCredentialResponse = async (response) => {
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await API.post("/auth/google", {
+        credential: response.credential,
+      });
+      const { access_token, email: userEmail } = res.data;
+      localStorage.setItem("token", access_token);
+      localStorage.setItem("user", JSON.stringify({ email: userEmail }));
+
+      setSuccess("Login successful! Redirecting...");
+      setTimeout(() => {
+        onLogin(access_token, { email: userEmail });
+      }, 800);
+    } catch (err) {
+      console.error("Google Auth error:", err);
+      const errMsg = err.response?.data?.detail || "Google login failed. Please try again.";
+      setError(Array.isArray(errMsg) ? errMsg[0]?.msg : errMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const initializeGoogleSignIn = () => {
+      if (window.google) {
+        window.google.accounts.id.initialize({
+          client_id: "762046660429-82kidovkkm6d2cljkdq9sgqraq34i03a.apps.googleusercontent.com",
+          callback: handleCredentialResponse,
+        });
+        const btnElem = document.getElementById("google-signin-btn");
+        if (btnElem) {
+          window.google.accounts.id.renderButton(btnElem, {
+            theme: "outline",
+            size: "large",
+            width: btnElem.offsetWidth || 380,
+          });
+        }
+      }
+    };
+
+    const loadGoogleScript = () => {
+      if (document.getElementById("google-gsi-client")) {
+        initializeGoogleSignIn();
+        return;
+      }
+      const script = document.createElement("script");
+      script.id = "google-gsi-client";
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.onload = initializeGoogleSignIn;
+      document.body.appendChild(script);
+    };
+
+    loadGoogleScript();
+  }, [isLogin]);
 
   const resetForm = () => {
     setEmail("");
@@ -208,6 +268,14 @@ function Auth({ onLogin }) {
           )}
         </button>
       </form>
+
+      <div className="auth-divider">
+        <span>or</span>
+      </div>
+
+      <div className="google-auth-container">
+        <div id="google-signin-btn"></div>
+      </div>
 
       <div className="auth-footer">
         <span>

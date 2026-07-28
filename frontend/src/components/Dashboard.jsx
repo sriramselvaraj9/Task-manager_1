@@ -6,7 +6,7 @@ import Toast from "./Toast";
 import TaskSidebar from "./TaskSidebar";
 import ConfirmationModal from "./ConfirmationModal";
 import AIChatbot from "./AIChatbot";
-import { AlertCircle, CheckSquare, Clock, ListTodo, Mic, MicOff, Plus, Sparkles, X } from "lucide-react";
+import { AlertCircle, CheckSquare, Clock, ListTodo, Mic, MicOff, Plus, Sparkles, X, Menu, Moon, Sun } from "lucide-react";
 
 const priorityWeight = {
   high: 0,
@@ -47,7 +47,7 @@ const sortTasks = (left, right) => {
   return left.id - right.id;
 };
 
-function Dashboard({ user, onLogout }) {
+function Dashboard({ user, onLogout, theme, toggleTheme }) {
   const [tasks, setTasks] = useState([]);
   const [section, setSection] = useState("dashboard"); // dashboard, upcoming, completed
   const [statusFilter, setStatusFilter] = useState("all"); // all, pending, completed
@@ -62,6 +62,7 @@ function Dashboard({ user, onLogout }) {
 
   const [showForm, setShowForm] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleTopVoiceAI = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -140,87 +141,90 @@ function Dashboard({ user, onLogout }) {
       return;
     }
 
-    // 2) Try backend AI for rich task management (Create, Update, Delete, Complete, etc.)
+    // 2) Check for Task Creation Intent locally for instant execution
+    const createIntents = ["create", "add", "make", "new task", "remind me", "set a task", "put a task", "schedule"];
+    const hasCreateIntent = createIntents.some((kw) => tl.includes(kw));
+
+    if (hasCreateIntent) {
+      let title = "";
+      let description = "";
+
+      const detailedMatch = raw.match(/(?:title\s+(.+?)\s+)?(?:description|details)\s+(.+)/i);
+      if (detailedMatch) {
+        title = (detailedMatch[1] || "").trim();
+        description = (detailedMatch[2] || "").trim();
+      }
+
+      if (!title) {
+        let cleaned = raw
+          .replace(/^(?:please\s+)?(?:can\s+you\s+)?(?:i\s+want\s+to\s+)?/i, "")
+          .replace(/^(?:create|add|make|set|put|schedule)\s+(?:a\s+)?(?:new\s+)?(?:task\s*)?(?:to|called|named|with\s+title)?\s*/i, "")
+          .replace(/^remind\s+me\s+(?:to\s+)?/i, "")
+          .trim();
+
+        cleaned = cleaned.replace(/\s+(?:due|by|priority|before)\s+.*$/i, "").trim();
+        title = cleaned;
+      }
+
+      if (title) {
+        title = title.charAt(0).toUpperCase() + title.slice(1);
+        const today = new Date();
+        let due_date = today.toISOString().slice(0, 10);
+
+        if (/\btomorrow\b/i.test(tl)) {
+          const tom = new Date(today);
+          tom.setDate(tom.getDate() + 1);
+          due_date = tom.toISOString().slice(0, 10);
+        } else if (/\bnext week\b/i.test(tl)) {
+          const nw = new Date(today);
+          nw.setDate(nw.getDate() + 7);
+          due_date = nw.toISOString().slice(0, 10);
+        } else {
+          const dateMatch = raw.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+          if (dateMatch) {
+            due_date = dateMatch[1];
+          }
+        }
+
+        let priority = "medium";
+        if (/\b(high|urgent|important|critical)\b/i.test(tl)) {
+          priority = "high";
+        } else if (/\b(low|minor)\b/i.test(tl)) {
+          priority = "low";
+        }
+
+        const start_date = today.toISOString().slice(0, 10);
+
+        try {
+          setLoading(true);
+          const payload = { title, description, start_date, due_date, priority, completed: false };
+          const response = await API.post("/tasks", payload);
+          setTasks((prev) => [...prev, response.data]);
+          setSearchQuery("");
+          setToast({ visible: true, message: `Created task: "${title}"`, type: "success" });
+          return;
+        } catch (err) {
+          console.error("Voice task creation error:", err);
+          const errMsg = err.response?.data?.detail || "Failed to create task.";
+          setToast({ visible: true, message: Array.isArray(errMsg) ? errMsg[0]?.msg : errMsg, type: "error" });
+          return;
+        } finally {
+          setLoading(false);
+        }
+      }
+    }
+
+    // 3) Fallback: Search or backend AI
     try {
       setLoading(true);
       const response = await API.post("/ai/chat", { message: raw });
       const data = response.data;
-      const fn = data.function_name;
-      const intent = data.intent;
-
-      // If the AI successfully performed an operation that changes database state
-      const dbMutatingFunctions = ["create_task", "update_task", "delete_task", "restore_task", "permanent_delete", "complete_task"];
-      const isMutation = dbMutatingFunctions.includes(fn) || (intent === "CREATE_TASK" && data.result);
-
-      if (isMutation) {
+      if (data.result) {
         await fetchTasks();
-        setSearchQuery("");
-        setToast({ visible: true, message: data.ai_message || "Action completed successfully.", type: "success" });
-        return;
       }
-
-      // If it's a search intent, update search query in UI
-      if (fn === "search_tasks" || intent === "SEARCH_TASKS") {
-        const query = data.function_arguments?.query || raw;
-        setSearchQuery(query);
-        setToast({ visible: true, message: `Searching: ${query}`, type: "success" });
-        return;
-      }
-      
-      // Fallback if AI response doesn't execute a specific DB operation
       setSearchQuery(raw);
     } catch (err) {
-      console.error("AI voice processing failed, falling back to local processing:", err);
-      // Fallback to local regex-based task creation
-      const isCreateAction = /^(?:create|add|make|new)\b/i.test(tl);
-      if (isCreateAction) {
-        let title = "";
-        let description = "";
-
-        const mTitleDesc = raw.match(/(?:with\s+)?(?:the\s+)?title\s+(.+?)\s+(?:and\s+)?(?:with\s+)?(?:the\s+)?description\s+(.+)/i);
-        if (mTitleDesc) {
-          title = mTitleDesc[1].trim();
-          description = mTitleDesc[2].trim();
-        } else {
-          const mDescTitle = raw.match(/(?:with\s+)?(?:the\s+)?description\s+(.+?)\s+(?:and\s+)?(?:with\s+)?(?:the\s+)?title\s+(.+)/i);
-          if (mDescTitle) {
-            description = mDescTitle[1].trim();
-            title = mDescTitle[2].trim();
-          } else {
-            let cleaned = raw.replace(/^(?:create|add|make|new)\s+(?:a\s+)?(?:task\s*)?(?:with\s+)?(?:the\s+)?(?:title\s+)?/i, "").trim();
-            title = cleaned;
-          }
-        }
-
-        let due_date = new Date().toISOString().slice(0, 10);
-        const dueMatch = raw.match(/\b(?:due|by)\s+(\d{4}-\d{2}-\d{2})\b/i);
-        if (dueMatch) {
-          due_date = dueMatch[1];
-        } else if (/\btomorrow\b/i.test(raw)) {
-          const d = new Date();
-          d.setDate(d.getDate() + 1);
-          due_date = d.toISOString().slice(0, 10);
-        }
-
-        if (title) {
-          try {
-            const today = new Date().toISOString().slice(0, 10);
-            const payload = { title, description, start_date: today, due_date, priority: "medium", completed: false };
-            const response = await API.post("/tasks", payload);
-            setTasks((prev) => [...prev, response.data]);
-            setSearchQuery("");
-            setToast({ visible: true, message: `Created task: ${title}`, type: "success" });
-          } catch (localErr) {
-            console.error("Local voice task creation failed:", localErr);
-            const errMsg = localErr.response?.data?.detail || "Failed to create task.";
-            const msg = Array.isArray(errMsg) ? errMsg[0]?.msg : errMsg;
-            setToast({ visible: true, message: msg, type: "error" });
-          }
-          return;
-        }
-      }
-      
-      // Default fallback
+      console.error("Voice processing search fallback:", err);
       setSearchQuery(raw);
     } finally {
       setLoading(false);
@@ -392,10 +396,37 @@ function Dashboard({ user, onLogout }) {
         onLogout={onLogout}
         userEmail={user?.email}
         upcomingCount={upcomingCount}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       {/* Main Content Area */}
       <div className="dashboard-main-content">
+        {/* Mobile top header */}
+        <header className="mobile-top-header">
+          <div className="mobile-logo-wrapper">
+            <Sparkles className="logo-icon" />
+            <span className="mobile-brand-name">TaskFlow</span>
+          </div>
+          <div className="mobile-header-actions">
+            <button type="button" className="mobile-action-btn theme-toggle" onClick={toggleTheme} title="Toggle Theme" aria-label="Toggle theme">
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <div className="mobile-user-avatar" title={user?.email || "User"}>
+              {user?.email?.charAt(0).toUpperCase() || 'U'}
+            </div>
+            <button
+              type="button"
+              className="mobile-action-btn menu-toggle"
+              onClick={() => setSidebarOpen(true)}
+              title="Open Menu"
+              aria-label="Open menu"
+            >
+              <Menu size={20} />
+            </button>
+          </div>
+        </header>
+
         {/* Top Navbar */}
         <header className="top-navbar">
           <div className="top-search">
@@ -422,6 +453,15 @@ function Dashboard({ user, onLogout }) {
           <div className="top-actions">
             <button
               type="button"
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button
+              type="button"
               className={`btn-primary-sm ${showForm ? "active" : ""}`}
               onClick={() => {
                 setEditTask(null);
@@ -441,7 +481,7 @@ function Dashboard({ user, onLogout }) {
         </header>
 
         {/* Page Content */}
-        <main className={`page-content ${showForm || editTask ? "has-sidebar" : "full-width"}`}>
+        <main className="page-content full-width">
           <div className="main-feed">
             {/* Quick Stats Panel */}
             <div className="stats-grid">
@@ -561,8 +601,8 @@ function Dashboard({ user, onLogout }) {
           </div>
 
           {(showForm || editTask) && (
-            <aside className="right-sidebar">
-              <div className="glass-panel form-panel">
+            <div className="task-form-modal-overlay" onClick={() => { setShowForm(false); setEditTask(null); }}>
+              <div className="glass-panel form-panel task-form-modal-card" onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                   <h2 style={{ margin: 0 }}>{editTask ? "Edit Task" : "Create Task"}</h2>
                   <button
@@ -581,14 +621,18 @@ function Dashboard({ user, onLogout }) {
                     if (ok) setShowForm(false);
                     return ok;
                   }}
-                  onUpdate={(id, payload) => updateTask(id, payload)}
+                  onUpdate={async (id, payload) => {
+                    const ok = await updateTask(id, payload);
+                    if (ok) setEditTask(null);
+                    return ok;
+                  }}
                   onCancelEdit={() => setEditTask(null)}
                   onToast={(msg, type) =>
                     setToast({ visible: true, message: msg, type: type || "success" })
                   }
                 />
               </div>
-            </aside>
+            </div>
           )}
         </main>
       </div>

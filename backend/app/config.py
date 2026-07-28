@@ -9,6 +9,7 @@ class Settings:
     JWT_SECRET: str = os.getenv("JWT_SECRET", "super-secret-key-change-in-production")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "762046660429-82kidovkkm6d2cljkdq9sgqraq34i03a.apps.googleusercontent.com")
     
     # CORS Origins (comma-separated string in env, parsed as list)
     CORS_ALLOWED_ORIGINS: list[str] = [

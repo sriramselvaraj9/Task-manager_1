@@ -3,7 +3,7 @@ import API from "../services/api";
 import TaskSidebar from "./TaskSidebar";
 import ConfirmationModal from "./ConfirmationModal";
 import Toast from "./Toast";
-import { AlertCircle, CalendarDays, Clock, RotateCcw, Trash2 } from "lucide-react";
+import { AlertCircle, CalendarDays, Clock, RotateCcw, Trash2, Menu, Moon, Sparkles, Sun } from "lucide-react";
 
 const formatDate = (value) => {
   if (!value) return "N/A";
@@ -18,12 +18,13 @@ const formatDate = (value) => {
   });
 };
 
-function RestorePage({ user, onLogout }) {
+function RestorePage({ user, onLogout, theme, toggleTheme }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState({ visible: false, message: "" });
   const [modal, setModal] = useState({ open: false, type: null, task: null, loading: false, error: "" });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const fetchDeletedTasks = async () => {
     setLoading(true);
@@ -77,16 +78,58 @@ function RestorePage({ user, onLogout }) {
 
   return (
     <div className="dashboard-container">
-      <TaskSidebar mode="restore" userEmail={user?.email} onLogout={onLogout} />
+      <TaskSidebar
+        mode="restore"
+        userEmail={user?.email}
+        onLogout={onLogout}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
 
       <div className="dashboard-main-content">
+        {/* Mobile top header */}
+        <header className="mobile-top-header">
+          <div className="mobile-logo-wrapper">
+            <Sparkles className="logo-icon" />
+            <span className="mobile-brand-name">TaskFlow</span>
+          </div>
+          <div className="mobile-header-actions">
+            <button type="button" className="mobile-action-btn theme-toggle" onClick={toggleTheme} title="Toggle Theme" aria-label="Toggle theme">
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <div className="mobile-user-avatar" title={user?.email || "User"}>
+              {user?.email?.charAt(0).toUpperCase() || 'U'}
+            </div>
+            <button
+              type="button"
+              className="mobile-action-btn menu-toggle"
+              onClick={() => setSidebarOpen(true)}
+              title="Open Menu"
+              aria-label="Open menu"
+            >
+              <Menu size={20} />
+            </button>
+          </div>
+        </header>
+
         <header className="top-navbar restore-navbar">
           <div>
             <p className="page-eyebrow">Recovery queue</p>
             <h2 className="restore-title">Restore Deleted Tasks</h2>
           </div>
-          <div className="restore-meta">
-            <span>{tasks.length} deleted task{tasks.length === 1 ? "" : "s"}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <button
+              type="button"
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <div className="restore-meta">
+              <span>{tasks.length} deleted task{tasks.length === 1 ? "" : "s"}</span>
+            </div>
           </div>
         </header>
 

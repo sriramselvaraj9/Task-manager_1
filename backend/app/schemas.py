@@ -36,6 +36,7 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    email: str | None = None
 
 
 class TokenData(BaseModel):
@@ -87,3 +88,7 @@ class TaskResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class GoogleAuth(BaseModel):
+    credential: str

@@ -1,5 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+import urllib.request
+import json
+import secrets
 
 from ..database import get_db
 from .. import models, schemas
@@ -65,3 +68,65 @@ async def login(
 
     controller = AuthController(db)
     return controller.login(username, password)
+
+
+@router.post("/google", response_model=schemas.Token)
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def google_auth(
+    request: Request,
+    auth_data: schemas.GoogleAuth,
+    db: Session = Depends(get_db)
+):
+    """Authenticate or register user via Google OAuth ID token."""
+    id_token = auth_data.credential
+    if not id_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Credential token is required"
+        )
+
+    # Verify ID token with Google API tokeninfo endpoint
+    url = f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "FastAPI-App"})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            token_info = json.loads(response.read().decode())
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Google token verification failed: {str(e)}"
+        )
+
+    # Validate audience matches our Google Client ID
+    aud = token_info.get("aud")
+    if aud != settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token audience mismatch"
+        )
+
+    email = token_info.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email address not provided in Google account"
+        )
+
+    # Check if user already exists
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        # Register user with random password
+        dummy_password = secrets.token_hex(16)
+        from ..auth import get_password_hash
+        user = models.User(
+            email=email,
+            hashed_password=get_password_hash(dummy_password)
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    # Create access token
+    from ..auth import create_access_token
+    access_token = create_access_token(data={"sub": user.email})
+    return {"access_token": access_token, "token_type": "bearer", "email": user.email}

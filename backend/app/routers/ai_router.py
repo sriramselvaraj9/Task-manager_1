@@ -105,3 +105,39 @@ async def improve_text(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"AI service error: {str(exc)}",
         ) from exc
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+
+
+class ChatResponse(BaseModel):
+    ai_message: str
+    intent: str | None = None
+    function_name: str | None = None
+    result: dict | None = None
+
+
+@router.post(
+    "/chat",
+    response_model=ChatResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Process AI chat and voice commands",
+)
+@limiter.limit(settings.RATE_LIMIT_AI)
+async def ai_chat(
+    request: Request,
+    body: ChatRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Handles natural language chat and voice commands for task management.
+    """
+    raw_message = body.message.strip()
+
+    return ChatResponse(
+        ai_message=f"Received command: '{raw_message}'",
+        intent="GENERAL",
+        function_name=None,
+        result=None
+    )

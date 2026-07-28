@@ -18,6 +18,92 @@ import "./AIChatbot.css";
 
 const STORAGE_KEY = "ai_chatbot_history";
 
+const generateMessageId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+function speakText(text) {
+  if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  } catch (e) {
+    console.warn("Speech synthesis failed:", e);
+  }
+}
+
+function parseVoiceCreateTask(text) {
+  if (!text || typeof text !== "string") return null;
+  const raw = text.trim();
+  const tl = raw.toLowerCase();
+
+  const createIntents = ["create", "add", "make", "new task", "remind me", "set a task", "put a task", "schedule"];
+  const hasIntent = createIntents.some((kw) => tl.includes(kw));
+
+  if (!hasIntent) return null;
+
+  let title = "";
+  let description = "";
+
+  const detailedMatch = raw.match(/(?:title\s+(.+?)\s+)?(?:description|details)\s+(.+)/i);
+  if (detailedMatch) {
+    title = (detailedMatch[1] || "").trim();
+    description = (detailedMatch[2] || "").trim();
+  }
+
+  if (!title) {
+    let cleaned = raw
+      .replace(/^(?:please\s+)?(?:can\s+you\s+)?(?:i\s+want\s+to\s+)?/i, "")
+      .replace(/^(?:create|add|make|set|put|schedule)\s+(?:a\s+)?(?:new\s+)?(?:task\s*)?(?:to|called|named|with\s+title)?\s*/i, "")
+      .replace(/^remind\s+me\s+(?:to\s+)?/i, "")
+      .trim();
+
+    cleaned = cleaned.replace(/\s+(?:due|by|priority|before)\s+.*$/i, "").trim();
+    title = cleaned;
+  }
+
+  if (!title) return null;
+
+  title = title.charAt(0).toUpperCase() + title.slice(1);
+
+  const today = new Date();
+  let due_date = today.toISOString().slice(0, 10);
+
+  if (/\btomorrow\b/i.test(tl)) {
+    const tom = new Date(today);
+    tom.setDate(tom.getDate() + 1);
+    due_date = tom.toISOString().slice(0, 10);
+  } else if (/\bnext week\b/i.test(tl)) {
+    const nw = new Date(today);
+    nw.setDate(nw.getDate() + 7);
+    due_date = nw.toISOString().slice(0, 10);
+  } else {
+    const dateMatch = raw.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+    if (dateMatch) {
+      due_date = dateMatch[1];
+    }
+  }
+
+  let priority = "medium";
+  if (/\b(high|urgent|important|critical)\b/i.test(tl)) {
+    priority = "high";
+  } else if (/\b(low|minor)\b/i.test(tl)) {
+    priority = "low";
+  }
+
+  const start_date = today.toISOString().slice(0, 10);
+
+  return {
+    title,
+    description,
+    start_date,
+    due_date,
+    priority,
+    completed: false,
+  };
+}
+
 const initialMessages = [
   {
     id: 1,
@@ -93,10 +179,10 @@ function AIChatbot({ visible = false, onClose, onTaskSync, onNavigateSection, on
       };
 
       recognition.onerror = (event) => {
-        console.error("Speech recognition error:", event.error);
         setListening(false);
         setStatus("Online");
         if (event.error !== "no-speech") {
+          console.error("Speech recognition error:", event.error);
           setError(`Voice error: ${event.error}`);
         }
       };
@@ -119,7 +205,7 @@ function AIChatbot({ visible = false, onClose, onTaskSync, onNavigateSection, on
     if (!transcriptText || !transcriptText.trim()) return;
 
     const userMessage = {
-      id: Date.now(),
+      id: generateMessageId(),
       role: "user",
       text: transcriptText.trim(),
       timestamp: new Date().toISOString(),
@@ -194,7 +280,7 @@ function AIChatbot({ visible = false, onClose, onTaskSync, onNavigateSection, on
 
   const addAssistantMessage = (content) => {
     const base = {
-      id: messages.length + 1,
+      id: generateMessageId(),
       role: "assistant",
       timestamp: new Date().toISOString(),
     };
@@ -214,7 +300,7 @@ function AIChatbot({ visible = false, onClose, onTaskSync, onNavigateSection, on
     if (!input.trim()) return;
 
     const userMessage = {
-      id: messages.length + 1,
+      id: generateMessageId(),
       role: "user",
       text: input.trim(),
       timestamp: new Date().toISOString(),
@@ -265,43 +351,25 @@ function AIChatbot({ visible = false, onClose, onTaskSync, onNavigateSection, on
     const t = text.trim();
     const tl = t.toLowerCase();
 
-    // Create patterns:
-    // 1) 'create task title X description Y' -> extract both
-    // 2) 'create task X' -> use rest as title
-    const mCreateDetailed = t.match(/^(?:create|add|make)\s+(?:task\s*)?title\s+(.+?)(?:\s+description\s+(.+))?$/i);
-    const mCreate = tl.match(/^(?:create|add|make)\s+(?:task\s*)?(.*)/i);
-    if ((mCreateDetailed && mCreateDetailed[1]) || (mCreate && mCreate[1] && mCreate[1].trim())) {
-      const title = mCreateDetailed?.[1]?.trim() || mCreate[1].trim();
-      const description = mCreateDetailed?.[2]?.trim() || "";
-
-      // If user provided an explicit due date in the create text (e.g., 'due 2024-12-31'), try to extract it
-      const dueMatch = t.match(/\b(?:due|by)\s+(\d{4}-\d{2}-\d{2})\b/);
-      if (dueMatch) {
-        const due = dueMatch[1];
-        try {
-          const today = new Date().toISOString().slice(0, 10);
-          const payload = { title, description, start_date: today, due_date: due, priority: "medium", completed: false };
-          const resp = await API.post('/tasks', payload);
-          const successMsg = `Created task: ${resp.data.title}`;
-          addAssistantMessage(successMsg);
-          speakText(successMsg);
-          onTaskSync?.();
-        } catch (err) {
-          console.error('Failed to create task', err);
-          const msg = err.response?.data?.detail || err.message || 'Unknown error';
-          const errMsg = `Sorry, I could not create the task. ${Array.isArray(msg) ? msg[0]?.msg || msg : msg}`;
-          addAssistantMessage(errMsg);
-          speakText(errMsg);
-        }
+    // 1) Natural voice creation parsing:
+    const taskPayload = parseVoiceCreateTask(t);
+    if (taskPayload) {
+      try {
+        const resp = await API.post("/tasks", taskPayload);
+        const createdTask = resp.data;
+        const successMsg = `Created task "${createdTask.title}" (Due: ${createdTask.due_date}, Priority: ${createdTask.priority}).`;
+        addAssistantMessage(successMsg);
+        speakText(successMsg);
+        onTaskSync?.();
+        return true;
+      } catch (err) {
+        console.error("Failed to create task via voice command:", err);
+        const msg = err.response?.data?.detail || err.message || "Unknown error";
+        const errMsg = `Sorry, I could not create the task. ${Array.isArray(msg) ? msg[0]?.msg || msg : msg}`;
+        addAssistantMessage(errMsg);
+        speakText(errMsg);
         return true;
       }
-
-      // No due date provided: set pending action and ask user for due date
-      setPendingAction({ type: "create", payload: { title, description } });
-      const askDateMsg = "I can create that. When should it be due? Reply with YYYY-MM-DD, 'today', or 'tomorrow'.";
-      addAssistantMessage(askDateMsg);
-      speakText(askDateMsg);
-      return true;
     }
 
     // Delete by id: 'delete task 3' or 'delete 3'
