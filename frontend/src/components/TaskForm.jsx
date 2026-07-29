@@ -34,7 +34,7 @@ function AIImproveButton({ onClick, loading, tooltip, id }) {
   );
 }
 
-function TaskForm({ onAdd, onToast, editTask = null, onUpdate, onCancelEdit }) {
+function TaskForm({ onAdd, onToast, editTask = null, initialData = null, onUpdate, onCancelEdit }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState(getTodayDate());
@@ -144,7 +144,7 @@ function TaskForm({ onAdd, onToast, editTask = null, onUpdate, onCancelEdit }) {
     }
   };
 
-  // Populate form when editTask changes
+  // Populate form when editTask or initialData changes
   useEffect(() => {
     if (editTask) {
       setTitle(editTask.title || "");
@@ -152,8 +152,14 @@ function TaskForm({ onAdd, onToast, editTask = null, onUpdate, onCancelEdit }) {
       setStartDate(editTask.start_date || getTodayDate());
       setDueDate(editTask.due_date || getTodayDate());
       setPriority(editTask.priority || "medium");
+    } else if (initialData) {
+      setTitle(initialData.title || "");
+      setDescription(initialData.description || "");
+      setStartDate(initialData.start_date || getTodayDate());
+      setDueDate(initialData.due_date || getTodayDate());
+      setPriority(initialData.priority || "medium");
     }
-  }, [editTask]);
+  }, [editTask, initialData]);
 
   return (
     <form className="task-form" onSubmit={handleSubmit}>

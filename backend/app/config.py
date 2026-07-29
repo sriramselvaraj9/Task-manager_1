@@ -9,13 +9,13 @@ class Settings:
     JWT_SECRET: str = os.getenv("JWT_SECRET", "super-secret-key-change-in-production")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
-    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "762046660429-82kidovkkm6d2cljkdq9sgqraq34i03a.apps.googleusercontent.com")
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "1057324752424-v3810i4l3fu25cumnoff3avttu35j1lm.apps.googleusercontent.com")
     
     # CORS Origins (comma-separated string in env, parsed as list)
     CORS_ALLOWED_ORIGINS: list[str] = [
         origin.strip() for origin in os.getenv(
             "CORS_ALLOWED_ORIGINS",
-            "http://localhost:5173,http://localhost:5175,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:5175,http://127.0.0.1:3000"
+            "http://localhost:5173,http://:5175,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:5175,http://127.0.0.1:3000,https://9x8f4n18-5173.inc1.devtunnels.ms"
         ).split(",")
     ]
     
@@ -27,6 +27,6 @@ class Settings:
     # AI service keys
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-    AI_API_KEY: str = os.getenv("OPENAI_API_KEY", os.getenv("GROQ_API_KEY", ""))
+    AI_API_KEY: str = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
 
 settings = Settings()

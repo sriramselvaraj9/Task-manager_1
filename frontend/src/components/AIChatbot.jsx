@@ -46,22 +46,24 @@ function parseVoiceCreateTask(text) {
   let title = "";
   let description = "";
 
-  const detailedMatch = raw.match(/(?:title\s+(.+?)\s+)?(?:description|details)\s+(.+)/i);
-  if (detailedMatch) {
-    title = (detailedMatch[1] || "").trim();
-    description = (detailedMatch[2] || "").trim();
+  const descSplit = raw.split(/(?:\s+and)?\s+(?:description|details)\s*(?:is|:)?\s*/i);
+  if (descSplit.length > 1) {
+    title = descSplit[0].trim();
+    description = descSplit.slice(1).join(" ").trim();
+  } else {
+    title = raw.trim();
   }
 
-  if (!title) {
-    let cleaned = raw
-      .replace(/^(?:please\s+)?(?:can\s+you\s+)?(?:i\s+want\s+to\s+)?/i, "")
-      .replace(/^(?:create|add|make|set|put|schedule)\s+(?:a\s+)?(?:new\s+)?(?:task\s*)?(?:to|called|named|with\s+title)?\s*/i, "")
-      .replace(/^remind\s+me\s+(?:to\s+)?/i, "")
-      .trim();
+  title = title
+    .replace(/^(?:please\s+)?(?:can\s+you\s+)?(?:i\s+want\s+to\s+)?/i, "")
+    .replace(/^(?:create|add|make|set|put|schedule)\s+(?:a\s+)?(?:new\s+)?(?:task\s*)?(?:to|called|named|with\s+title)?\s*/i, "")
+    .replace(/^(?:title\s*(?:is|=|:)?\s*)/i, "")
+    .replace(/^remind\s+me\s+(?:to\s+)?/i, "")
+    .replace(/^(?:with\s+that\.?\s*)?/i, "")
+    .trim();
 
-    cleaned = cleaned.replace(/\s+(?:due|by|priority|before)\s+.*$/i, "").trim();
-    title = cleaned;
-  }
+  title = title.replace(/\s+(?:due|by|priority|before)\s+.*$/i, "").trim();
+  description = description.replace(/^(?:is|are|=|:)\s+/i, "").trim();
 
   if (!title) return null;
 
@@ -132,7 +134,7 @@ function formatTimestamp(timestamp) {
   return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function AIChatbot({ visible = false, onClose, onTaskSync, onNavigateSection, onFilterStatus, onSetSearchQuery }) {
+function AIChatbot({ visible = false, onClose, onTaskSync, onNavigateSection, onFilterStatus, onSetSearchQuery, onFillTaskForm }) {
   const [open, setOpen] = useState(visible);
   const [messages, setMessages] = useState(loadSavedMessages);
   const [input, setInput] = useState("");
@@ -354,6 +356,13 @@ function AIChatbot({ visible = false, onClose, onTaskSync, onNavigateSection, on
     // 1) Natural voice creation parsing:
     const taskPayload = parseVoiceCreateTask(t);
     if (taskPayload) {
+      if (onFillTaskForm) {
+        onFillTaskForm(taskPayload);
+        const confirmMsg = `I've pre-filled the form with task details for "${taskPayload.title}". Please review the form and click "Add Task" to confirm.`;
+        addAssistantMessage(confirmMsg);
+        speakText(confirmMsg);
+        return true;
+      }
       try {
         const resp = await API.post("/tasks", taskPayload);
         const createdTask = resp.data;

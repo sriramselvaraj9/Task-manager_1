@@ -34,7 +34,8 @@ services:
     container_name: frontend-container
 
     environment:
-      VITE_API_URL: http://localhost:8000
+      VITE_API_URL: "https://9x8f4n18-8000.inc1.devtunnels.ms"
+      VITE_GOOGLE_CLIENT_ID: "1057324752424-v3810i4l3fu25cumnoff3avttu35j1lm.apps.googleusercontent.com"
 
     ports:
       - "5173:5173"

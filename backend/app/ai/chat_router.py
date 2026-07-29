@@ -81,6 +81,7 @@ async def chat_assistant(
     elif function_name is None and intent == "CREATE_TASK":
         title_text = payload.get("message", "").strip()
         title_text = re.sub(r"^(create|add|make|new)\s+(a\s+)?(task\s+)?", "", title_text, flags=re.IGNORECASE).strip()
+        title_text = re.sub(r"^(title\s*(is|=|:)?\s*)", "", title_text, flags=re.IGNORECASE).strip()
         title_text = title_text or "New Task"
         task_args = {
             "title": title_text,

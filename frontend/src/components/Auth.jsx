@@ -38,19 +38,28 @@ function Auth({ onLogin }) {
   };
 
   useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "1057324752424-v3810i4l3fu25cumnoff3avttu35j1lm.apps.googleusercontent.com";
+
     const initializeGoogleSignIn = () => {
-      if (window.google) {
-        window.google.accounts.id.initialize({
-          client_id: "762046660429-82kidovkkm6d2cljkdq9sgqraq34i03a.apps.googleusercontent.com",
-          callback: handleCredentialResponse,
-        });
-        const btnElem = document.getElementById("google-signin-btn");
-        if (btnElem) {
-          window.google.accounts.id.renderButton(btnElem, {
-            theme: "outline",
-            size: "large",
-            width: btnElem.offsetWidth || 380,
+      if (window.google && clientId) {
+        try {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: handleCredentialResponse,
           });
+          const btnElem = document.getElementById("google-signin-btn");
+          if (btnElem) {
+            btnElem.innerHTML = "";
+            window.google.accounts.id.renderButton(btnElem, {
+              theme: "outline",
+              size: "large",
+              width: 280,
+              shape: "pill",
+              text: "signin_with",
+            });
+          }
+        } catch (e) {
+          console.warn("Google Sign-In initialization warning:", e);
         }
       }
     };

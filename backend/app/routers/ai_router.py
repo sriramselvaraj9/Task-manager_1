@@ -135,9 +135,39 @@ async def ai_chat(
     """
     raw_message = body.message.strip()
 
+    if settings.GROQ_API_KEY:
+        try:
+            client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+            completion = await client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a friendly, helpful AI voice assistant for a Task Management application. "
+                            "Assist the user with task management, organization, productivity tips, or general questions. "
+                            "Keep your response concise, polite, and natural for spoken audio (1 to 3 sentences)."
+                        ),
+                    },
+                    {"role": "user", "content": raw_message},
+                ],
+                max_tokens=300,
+                temperature=0.7,
+            )
+            ai_text = completion.choices[0].message.content.strip()
+            if ai_text:
+                return ChatResponse(
+                    ai_message=ai_text,
+                    intent="GENERAL",
+                    function_name=None,
+                    result=None,
+                )
+        except Exception as exc:
+            print("Groq AI chat call error:", exc)
+
     return ChatResponse(
-        ai_message=f"Received command: '{raw_message}'",
+        ai_message=f"I received your command: '{raw_message}'",
         intent="GENERAL",
         function_name=None,
-        result=None
+        result=None,
     )

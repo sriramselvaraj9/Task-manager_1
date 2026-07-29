@@ -61,6 +61,7 @@ function Dashboard({ user, onLogout, theme, toggleTheme }) {
   const [deleteModal, setDeleteModal] = useState({ open: false, task: null, loading: false, error: "" });
 
   const [showForm, setShowForm] = useState(false);
+  const [draftTask, setDraftTask] = useState(null);
   const [voiceListening, setVoiceListening] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -114,34 +115,7 @@ function Dashboard({ user, onLogout, theme, toggleTheme }) {
 
     const tl = raw.toLowerCase();
 
-    // 1) Handle Navigation & Filter Voice Commands locally for instant response
-    if (/\b(pending|incomplete|not done)\b/.test(tl)) {
-      setSection("dashboard");
-      setStatusFilter("pending");
-      setSearchQuery("");
-      setToast({ visible: true, message: "Filtered UI: Pending tasks", type: "success" });
-      return;
-    } else if (/\b(completed|done|finished)\b/.test(tl)) {
-      setSection("completed");
-      setStatusFilter("all");
-      setSearchQuery("");
-      setToast({ visible: true, message: "Navigated: Completed tasks", type: "success" });
-      return;
-    } else if (/\b(upcoming|due soon)\b/.test(tl)) {
-      setSection("upcoming");
-      setStatusFilter("all");
-      setSearchQuery("");
-      setToast({ visible: true, message: "Navigated: Upcoming tasks", type: "success" });
-      return;
-    } else if (/\b(all tasks|dashboard|home|my tasks)\b/.test(tl)) {
-      setSection("dashboard");
-      setStatusFilter("all");
-      setSearchQuery("");
-      setToast({ visible: true, message: "Showing all tasks", type: "success" });
-      return;
-    }
-
-    // 2) Check for Task Creation Intent locally for instant execution
+    // 1) Check for Task Creation Intent locally first for instant execution
     const createIntents = ["create", "add", "make", "new task", "remind me", "set a task", "put a task", "schedule"];
     const hasCreateIntent = createIntents.some((kw) => tl.includes(kw));
 
@@ -149,22 +123,24 @@ function Dashboard({ user, onLogout, theme, toggleTheme }) {
       let title = "";
       let description = "";
 
-      const detailedMatch = raw.match(/(?:title\s+(.+?)\s+)?(?:description|details)\s+(.+)/i);
-      if (detailedMatch) {
-        title = (detailedMatch[1] || "").trim();
-        description = (detailedMatch[2] || "").trim();
+      const descSplit = raw.split(/(?:\s+and)?\s+(?:description|details)\s*(?:is|:)?\s*/i);
+      if (descSplit.length > 1) {
+        title = descSplit[0].trim();
+        description = descSplit.slice(1).join(" ").trim();
+      } else {
+        title = raw.trim();
       }
 
-      if (!title) {
-        let cleaned = raw
-          .replace(/^(?:please\s+)?(?:can\s+you\s+)?(?:i\s+want\s+to\s+)?/i, "")
-          .replace(/^(?:create|add|make|set|put|schedule)\s+(?:a\s+)?(?:new\s+)?(?:task\s*)?(?:to|called|named|with\s+title)?\s*/i, "")
-          .replace(/^remind\s+me\s+(?:to\s+)?/i, "")
-          .trim();
+      title = title
+        .replace(/^(?:please\s+)?(?:can\s+you\s+)?(?:i\s+want\s+to\s+)?/i, "")
+        .replace(/^(?:create|add|make|set|put|schedule)\s+(?:a\s+)?(?:new\s+)?(?:task\s*)?(?:to|called|named|with\s+title)?\s*/i, "")
+        .replace(/^(?:title\s*(?:is|=|:)?\s*)/i, "")
+        .replace(/^remind\s+me\s+(?:to\s+)?/i, "")
+        .replace(/^(?:with\s+that\.?\s*)?/i, "")
+        .trim();
 
-        cleaned = cleaned.replace(/\s+(?:due|by|priority|before)\s+.*$/i, "").trim();
-        title = cleaned;
-      }
+      title = title.replace(/\s+(?:due|by|priority|before)\s+.*$/i, "").trim();
+      description = description.replace(/^(?:is|are|=|:)\s+/i, "").trim();
 
       if (title) {
         title = title.charAt(0).toUpperCase() + title.slice(1);
@@ -194,23 +170,49 @@ function Dashboard({ user, onLogout, theme, toggleTheme }) {
         }
 
         const start_date = today.toISOString().slice(0, 10);
+        const payload = { title, description, start_date, due_date, priority, completed: false };
 
-        try {
-          setLoading(true);
-          const payload = { title, description, start_date, due_date, priority, completed: false };
-          const response = await API.post("/tasks", payload);
-          setTasks((prev) => [...prev, response.data]);
-          setSearchQuery("");
-          setToast({ visible: true, message: `Created task: "${title}"`, type: "success" });
-          return;
-        } catch (err) {
-          console.error("Voice task creation error:", err);
-          const errMsg = err.response?.data?.detail || "Failed to create task.";
-          setToast({ visible: true, message: Array.isArray(errMsg) ? errMsg[0]?.msg : errMsg, type: "error" });
-          return;
-        } finally {
-          setLoading(false);
-        }
+        setDraftTask(payload);
+        setEditTask(null);
+        setShowForm(true);
+        setToast({
+          visible: true,
+          message: `Voice details filled into form! Click "Add Task" to confirm creation of "${title}".`,
+          type: "info",
+        });
+        return;
+      }
+    }
+
+    // 2) Handle Navigation & Filter Voice Commands locally when explicit action or target is present
+    const isNavAction = /\b(list|give|show|what|filter|view|open|go to|display|navigate|navigate to|switch to)\b/.test(tl);
+    const isExplicitNavTarget = /\b(completed page|completed section|completed tab|completed view|pending page|pending section|pending tab|upcoming page|upcoming section)\b/.test(tl);
+
+    if (isNavAction || isExplicitNavTarget) {
+      if (/\b(pending|incomplete|not done)\b/.test(tl)) {
+        setSection("dashboard");
+        setStatusFilter("pending");
+        setSearchQuery("");
+        setToast({ visible: true, message: "Filtered UI: Pending tasks", type: "success" });
+        return;
+      } else if (/\b(completed|done|finished)\b/.test(tl)) {
+        setSection("completed");
+        setStatusFilter("all");
+        setSearchQuery("");
+        setToast({ visible: true, message: "Navigated: Completed tasks", type: "success" });
+        return;
+      } else if (/\b(upcoming|due soon)\b/.test(tl)) {
+        setSection("upcoming");
+        setStatusFilter("all");
+        setSearchQuery("");
+        setToast({ visible: true, message: "Navigated: Upcoming tasks", type: "success" });
+        return;
+      } else if (/\b(all tasks|dashboard|home|my tasks)\b/.test(tl)) {
+        setSection("dashboard");
+        setStatusFilter("all");
+        setSearchQuery("");
+        setToast({ visible: true, message: "Showing all tasks", type: "success" });
+        return;
       }
     }
 
@@ -600,25 +602,34 @@ function Dashboard({ user, onLogout, theme, toggleTheme }) {
             </div>
           </div>
 
-          {(showForm || editTask) && (
-            <div className="task-form-modal-overlay" onClick={() => { setShowForm(false); setEditTask(null); }}>
+          {(showForm || editTask || draftTask) && (
+            <div className="task-form-modal-overlay" onClick={() => { setShowForm(false); setEditTask(null); setDraftTask(null); }}>
               <div className="glass-panel form-panel task-form-modal-card" onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h2 style={{ margin: 0 }}>{editTask ? "Edit Task" : "Create Task"}</h2>
+                  <h2 style={{ margin: 0 }}>{editTask ? "Edit Task" : draftTask ? "Confirm New Task" : "Create Task"}</h2>
                   <button
                     type="button"
                     className="icon-btn small"
-                    onClick={() => { setShowForm(false); setEditTask(null); }}
+                    onClick={() => { setShowForm(false); setEditTask(null); setDraftTask(null); }}
                     title="Close"
                   >
                     <X size={18} />
                   </button>
                 </div>
+                {draftTask && !editTask && (
+                  <div className="alert info margin-bottom" style={{ marginBottom: 12 }}>
+                    <span>✨ Form filled from voice command. Review details below and click <strong>Add Task</strong> to confirm.</span>
+                  </div>
+                )}
                 <TaskForm
                   editTask={editTask}
+                  initialData={draftTask}
                   onAdd={async (payload) => {
                     const ok = await addTask(payload);
-                    if (ok) setShowForm(false);
+                    if (ok) {
+                      setShowForm(false);
+                      setDraftTask(null);
+                    }
                     return ok;
                   }}
                   onUpdate={async (id, payload) => {
@@ -626,7 +637,7 @@ function Dashboard({ user, onLogout, theme, toggleTheme }) {
                     if (ok) setEditTask(null);
                     return ok;
                   }}
-                  onCancelEdit={() => setEditTask(null)}
+                  onCancelEdit={() => { setEditTask(null); setDraftTask(null); }}
                   onToast={(msg, type) =>
                     setToast({ visible: true, message: msg, type: type || "success" })
                   }
@@ -663,6 +674,16 @@ function Dashboard({ user, onLogout, theme, toggleTheme }) {
         onNavigateSection={setSection}
         onFilterStatus={setStatusFilter}
         onSetSearchQuery={setSearchQuery}
+        onFillTaskForm={(draftPayload) => {
+          setDraftTask(draftPayload);
+          setEditTask(null);
+          setShowForm(true);
+          setToast({
+            visible: true,
+            message: `Voice details filled! Click "Add Task" to confirm creation of "${draftPayload.title}".`,
+            type: "info",
+          });
+        }}
       />
     </div>
   );
